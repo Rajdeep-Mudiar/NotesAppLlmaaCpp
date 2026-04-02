@@ -1,0 +1,44 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Backend build outputs
+backend/build/
+backend/*.exe
+backend/*.obj
+backend/*.o
+backend/*.ilk
+backend/*.pdb
+backend/*.a
+backend/*.lib
+
+# Runtime note data (keep folder structure)
+backend/data/notes/*.json
+backend/data/notes/.history/
+data/notes/*.json
+data/notes/.history/
+
+# Local models / binaries
+models/*.gguf
+models/*.bin
+models/*.safetensors
+
+# Vendored engine source
+llama.cpp/
+
+# Environment files
+.env
+.env.*
+!.env.example
