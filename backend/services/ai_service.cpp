@@ -142,13 +142,6 @@ nlohmann::json AiService::buildSearchResponse(const std::string & query, const s
         });
     }
 
-    response["flashcards"] = buildFlashcards()["flashcards"];
-    response["graph"] = buildGraph();
-    response["contradictions"] = buildContradictions()["contradictions"];
-    response["learning_path"] = buildLearningPath()["learning_path"];
-    response["self_questions"] = buildSelfQuestions()["self_questions"];
-    response["ideas"] = buildIdeas()["ideas"];
-    response["insights"] = buildInsights();
     return response;
 }
 

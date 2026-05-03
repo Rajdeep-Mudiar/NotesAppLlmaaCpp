@@ -1,4 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+
+// How long (ms) to wait for a streamed LLM response before giving up.
+// Set to 3 minutes — llama-cli on CPU can take 1-2 min for 256 tokens.
+const STREAM_TIMEOUT_MS = 3 * 60 * 1000;
 
 async function apiRequest(apiBase, path, payload) {
   const response = await fetch(`${apiBase}${path}`, {
@@ -12,11 +16,12 @@ async function apiRequest(apiBase, path, payload) {
   return response.json();
 }
 
-async function streamSearch(apiBase, payload, onToken) {
+async function streamSearch(apiBase, payload, onToken, signal) {
   const response = await fetch(`${apiBase}/search/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
+    signal,
   });
 
   if (!response.ok || !response.body) {
@@ -79,7 +84,11 @@ export default function Chat({ notes, insights, onSync, apiBase }) {
   const [mode, setMode] = useState("chat");
   const [persona, setPersona] = useState("teacher");
   const [sending, setSending] = useState(false);
+  const [statusText, setStatusText] = useState("Thinking...");
   const bottomRef = useRef(null);
+  // Tracks the index of the in-progress assistant message in a ref so it is
+  // always fresh inside async callbacks without stale-closure issues.
+  const assistantIndexRef = useRef(-1);
 
   const notePreview = useMemo(() => notes.slice(0, 3), [notes]);
 
@@ -94,11 +103,13 @@ export default function Chat({ notes, insights, onSync, apiBase }) {
     }
 
     setSending(true);
+    setStatusText("Thinking...");
     setInput("");
 
-    let assistantIndex = -1;
+    // Compute the future index of the assistant placeholder BEFORE setState
+    // so there is no stale-closure / race condition.
     setMessages((current) => {
-      assistantIndex = current.length + 1;
+      assistantIndexRef.current = current.length + 1; // +1 because user msg is inserted first
       return [
         ...current,
         { role: "user", text: question },
@@ -108,59 +119,85 @@ export default function Chat({ notes, insights, onSync, apiBase }) {
 
     const payload = { query: question, mode, persona };
 
-    try {
-      const streamedResponse = await streamSearch(apiBase, payload, (chunk) => {
-        setMessages((current) => {
-          if (assistantIndex < 0 || !current[assistantIndex]) {
-            return current;
-          }
-          const next = [...current];
-          next[assistantIndex] = {
-            ...next[assistantIndex],
-            text: `${next[assistantIndex].text}${chunk}`,
-          };
-          return next;
-        });
+    // AbortController lets us cancel after STREAM_TIMEOUT_MS
+    const abortController = new AbortController();
+    const timeoutId = setTimeout(() => {
+      abortController.abort();
+      setStatusText("The AI is taking too long (still loading model). Please wait and retry.");
+    }, STREAM_TIMEOUT_MS);
+
+    const updateAssistant = (text) => {
+      setMessages((current) => {
+        const idx = assistantIndexRef.current;
+        if (idx < 0 || idx >= current.length) return current;
+        const next = [...current];
+        next[idx] = { ...next[idx], text };
+        return next;
       });
+    };
+
+    try {
+      let accumulated = "";
+      let firstToken = true;
+      setStatusText("Loading model... (this takes ~30–60 s on first run)");
+
+      const streamedResponse = await streamSearch(
+        apiBase,
+        payload,
+        (chunk) => {
+          if (firstToken) {
+            setStatusText("Receiving response...");
+            firstToken = false;
+          }
+          accumulated += chunk;
+          updateAssistant(accumulated);
+        },
+        abortController.signal
+      );
+
+      clearTimeout(timeoutId);
 
       if (!streamedResponse) {
-        throw new Error("No streamed completion payload received");
+        throw new Error("Stream ended without a completion payload.");
+      }
+
+      // If streaming delivered tokens, keep them; otherwise use the done payload.
+      if (!accumulated && streamedResponse.answer) {
+        updateAssistant(streamedResponse.answer);
       }
 
       await onSync();
     } catch (streamError) {
+      clearTimeout(timeoutId);
+
+      // Don't fall back if the user explicitly aborted (timeout)
+      if (streamError.name === "AbortError") {
+        updateAssistant(
+          "⏱ The request timed out (3 minutes). The model is very slow on CPU-only mode. " +
+          "Try asking a shorter question or wait for the model to finish loading."
+        );
+        setSending(false);
+        return;
+      }
+
+      // SSE stream failed — fall back to regular POST /search
+      setStatusText("Stream failed, trying direct request...");
       try {
         const fallback = await apiRequest(apiBase, "/search", payload);
-        setMessages((current) => {
-          if (assistantIndex < 0 || !current[assistantIndex]) {
-            return current;
-          }
-          const next = [...current];
-          next[assistantIndex] = {
-            ...next[assistantIndex],
-            text: fallback.answer || "No answer returned by the backend.",
-          };
-          return next;
-        });
+        updateAssistant(
+          fallback.answer || "The AI returned an empty response. Check the backend console."
+        );
         await onSync();
       } catch (fallbackError) {
-        setMessages((current) => {
-          if (assistantIndex < 0 || !current[assistantIndex]) {
-            return current;
-          }
-          const next = [...current];
-          next[assistantIndex] = {
-            ...next[assistantIndex],
-            text:
-              fallbackError.message ||
-              streamError.message ||
-              "Failed to ask the backend.",
-          };
-          return next;
-        });
+        updateAssistant(
+          `Error: ${fallbackError.message || streamError.message || "Backend request failed."}` +
+          " Make sure the backend server is running on port 8080."
+        );
       }
     } finally {
+      clearTimeout(timeoutId);
       setSending(false);
+      setStatusText("Thinking...");
     }
   }
 
@@ -204,7 +241,7 @@ export default function Chat({ notes, insights, onSync, apiBase }) {
               <p>
                 {message.text ||
                   (sending && index === messages.length - 1
-                    ? "Thinking..."
+                    ? statusText
                     : "")}
               </p>
             </div>

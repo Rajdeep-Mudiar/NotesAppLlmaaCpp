@@ -50,7 +50,7 @@ struct AppContext {
     AiService ai_service;
 
     AppContext(const std::filesystem::path & executable_dir)
-        : notes_service(resolveDataDir(executable_dir)), ai_engine("", resolveModelPath(executable_dir)), ai_service(notes_service, ai_engine) {}
+        : notes_service(resolveDataDir(executable_dir)), ai_engine(resolveLlamaBinary(executable_dir), resolveModelPath(executable_dir)), ai_service(notes_service, ai_engine) {}
 
     static std::string resolveDataDir(const std::filesystem::path & executable_dir) {
         if (const char * env = std::getenv("SECOND_BRAIN_DATA_DIR")) {
@@ -59,11 +59,36 @@ struct AppContext {
         return (executable_dir / ".." / "data" / "notes").lexically_normal().string();
     }
 
+    static std::string resolveLlamaBinary(const std::filesystem::path & executable_dir) {
+        const char * env = std::getenv("SECOND_BRAIN_LLAMA_BINARY");
+        if (env != nullptr) {
+            const fs::path env_path = env;
+            if (fs::exists(env_path)) {
+                return env_path.lexically_normal().string();
+            }
+        }
+
+        const std::vector<fs::path> candidates = {
+            executable_dir / ".." / "llama.cpp" / "build" / "bin" / "Debug" / "llama-cli.exe",
+            executable_dir / ".." / "llama.cpp" / "build" / "bin" / "llama-cli.exe",
+            executable_dir / ".." / "llama.cpp" / "build" / "bin" / "Release" / "llama-cli.exe",
+            executable_dir / ".." / "llama.cpp" / "build" / "bin" / "llama-cli",
+        };
+
+        for (const auto & candidate : candidates) {
+            if (fs::exists(candidate)) {
+                return candidate.lexically_normal().string();
+            }
+        }
+
+        return env ? env : "llama-cli";
+    }
+
     static std::string resolveModelPath(const std::filesystem::path & executable_dir) {
         if (const char * env = std::getenv("SECOND_BRAIN_MODEL_PATH")) {
             return env;
         }
-        return (executable_dir / ".." / ".." / "models" / "model.gguf").lexically_normal().string();
+        return (executable_dir / ".." / "models" / "model.gguf").lexically_normal().string();
     }
 };
 
