@@ -116,9 +116,9 @@ nlohmann::json AiService::buildSearchResponse(const std::string & query, const s
         "You are an AI Second Brain assistant. Answer ONLY from the provided notes. "
         "If the notes do not contain enough information, say what is missing. Do not invent facts.\n\n"
         + modeInstruction(mode, persona) + "\n\n"
-        "User question: " + query + "\n\n"
         "Notes:\n" + context.str() + "\n"
-        "Answer in a concise, helpful way and cite note titles when relevant.";
+        "User question: " + query + "\n\n"
+        "Answer (be concise and cite note titles):";
 
     std::string answer = ai_engine_.generate(prompt, 256);
     if (answer.empty()) {

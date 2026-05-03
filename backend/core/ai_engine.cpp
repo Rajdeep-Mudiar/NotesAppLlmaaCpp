@@ -109,22 +109,52 @@ std::string AiEngine::writePromptFile(const std::string & prompt) {
 }
 
 std::string AiEngine::cleanLlamaOutput(const std::string & raw) {
+    // 1. Identify common noise prefixes produced by llama-cli (Splash screen, logs, help text)
     static const std::vector<std::string> noise_prefixes = {
         "llama_", "ggml_", "gguf_", "load_tensors", "load_backend",
         "main:", "system_info", "sampling", "generate:", "[end of text]",
-        "build:", "Log start", "Log end",
+        "build:", "Log start", "Log end", "warning:", "available commands:",
+        "/exit", "stop or exit", "/regen", "/clear", "/read", "/glob", ">",
+        "Press", "Enter", "...", "Loading model"
     };
+
     std::istringstream stream(raw);
     std::ostringstream clean;
     std::string line;
-    while (std::getline(stream, line)) {
+    
+    // We want to skip everything until we find the actual answer part.
+    // Our prompt ends with "Answer (be concise and cite note titles):"
+    const std::string marker = "Answer (be concise and cite note titles):";
+    bool found_marker = false;
+    std::string after_marker;
+
+    // Search for the marker in the raw output (it might be echoed)
+    auto marker_pos = raw.rfind(marker);
+    if (marker_pos != std::string::npos) {
+        after_marker = raw.substr(marker_pos + marker.length());
+        found_marker = true;
+    }
+
+    // If we found the marker, process only what's after it.
+    // Otherwise, fallback to line-by-line filtering.
+    std::istringstream final_stream(found_marker ? after_marker : raw);
+
+    while (std::getline(final_stream, line)) {
         if (!line.empty() && line.back() == '\r') { line.pop_back(); }
+        
         bool is_noise = false;
         for (const auto & prefix : noise_prefixes) {
             if (line.rfind(prefix, 0) == 0) { is_noise = true; break; }
         }
-        if (!is_noise) { clean << line << '\n'; }
+        
+        // Also skip lines that are just prompt echoes (starting with '>')
+        if (!line.empty() && line[0] == '>') is_noise = true;
+
+        if (!is_noise) {
+            clean << line << '\n';
+        }
     }
+
     std::string result = clean.str();
     const auto first = result.find_first_not_of(" \t\r\n");
     if (first == std::string::npos) { return {}; }
