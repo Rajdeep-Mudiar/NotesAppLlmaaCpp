@@ -527,7 +527,13 @@ int main(int argc, char ** argv) {
             }
 
             std::thread([client_socket, &app]() {
-                handleClient(client_socket, app);
+                try {
+                    handleClient(client_socket, app);
+                } catch (const std::exception & e) {
+                    std::cerr << "[CRITICAL] Worker Thread Error: " << e.what() << std::endl;
+                } catch (...) {
+                    std::cerr << "[CRITICAL] Worker Thread Unknown Error" << std::endl;
+                }
                 closeSocket(client_socket);
             }).detach();
         }
