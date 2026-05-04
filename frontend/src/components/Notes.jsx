@@ -1,286 +1,128 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useState } from 'react';
 
-function parseTags(value) {
-  return value
-    .split(",")
-    .map((tag) => tag.trim().toLowerCase())
-    .filter(Boolean);
-}
+const Notes = ({ notes, onSave, onDelete }) => {
+  const [selectedNote, setSelectedNote] = useState(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
-async function apiRequest(apiBase, path, payload) {
-  const response = await fetch(`${apiBase}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`);
-  }
-  return response.json();
-}
+  const filteredNotes = notes.filter(n => 
+    n.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    n.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (n.tags && n.tags.some(t => t.toLowerCase().includes(searchQuery.toLowerCase())))
+  );
 
-export default function Notes({ notes, onChanged, apiBase }) {
-  const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
-  const [tags, setTags] = useState("");
-  const [editingId, setEditingId] = useState("");
-  const [filter, setFilter] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [historyForId, setHistoryForId] = useState("");
-  const [historyVersions, setHistoryVersions] = useState([]);
-  const [historyBusy, setHistoryBusy] = useState(false);
+  const getInitials = (title) => {
+    return title ? title.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() : "UN";
+  };
 
-  useEffect(() => {
-    if (!editingId) {
-      return;
+  const handleEdit = (note) => {
+    setSelectedNote(note);
+    setIsEditing(true);
+  };
+
+  const handleCreate = () => {
+    setSelectedNote({ title: "", content: "", tags: [] });
+    setIsEditing(true);
+  };
+
+  const handleSave = () => {
+    if (!selectedNote.title || !selectedNote.content) {
+        alert("Title and content are required.");
+        return;
     }
-    const note = notes.find((entry) => entry.id === editingId);
-    if (note) {
-      setTitle(note.title || "");
-      setContent(note.content || "");
-      setTags((note.tags || []).join(", "));
-    }
-  }, [editingId, notes]);
+    onSave(selectedNote);
+    setIsEditing(false);
+    setSelectedNote(null);
+  };
 
-  const visibleNotes = useMemo(() => {
-    const lowered = filter.toLowerCase();
-    if (!lowered) {
-      return notes;
-    }
-    return notes.filter((note) => {
-      const joinedTags = (note.tags || []).join(" ");
-      return `${note.title} ${note.content} ${joinedTags}`
-        .toLowerCase()
-        .includes(lowered);
-    });
-  }, [notes, filter]);
-
-  async function saveNote() {
-    if (!content.trim()) {
-      return;
-    }
-
-    setBusy(true);
-    try {
-      if (editingId) {
-        await apiRequest(apiBase, "/update", {
-          id: editingId,
-          title,
-          content,
-          tags: parseTags(tags),
-        });
-      } else {
-        await apiRequest(apiBase, "/add", {
-          title,
-          content,
-          tags: parseTags(tags),
-        });
-      }
-      setTitle("");
-      setContent("");
-      setTags("");
-      setEditingId("");
-      onChanged();
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function removeNote(id) {
-    setBusy(true);
-    try {
-      await apiRequest(apiBase, "/delete", { id });
-      onChanged();
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function openHistory(id) {
-    setHistoryForId(id);
-    setHistoryBusy(true);
-    try {
-      const data = await apiRequest(apiBase, "/history", { id });
-      setHistoryVersions(data.versions || []);
-    } finally {
-      setHistoryBusy(false);
-    }
-  }
-
-  async function restoreVersion(id, versionFile) {
-    setBusy(true);
-    try {
-      await apiRequest(apiBase, "/restore-version", {
-        id,
-        version_file: versionFile,
-      });
-      await openHistory(id);
-      await onChanged();
-    } finally {
-      setBusy(false);
-    }
+  if (isEditing) {
+    return (
+      <div className="editor-pane">
+        <div className="editor-header">
+          <input 
+            className="editor-title-input"
+            value={selectedNote.title}
+            onChange={(e) => setSelectedNote({...selectedNote, title: e.target.value})}
+            placeholder="What's on your mind?"
+          />
+          <div className="editor-footer">
+            <button className="btn-add" onClick={handleSave}>Post Note</button>
+            <button className="btn-add" style={{background: '#E4E6EB', color: '#050505'}} onClick={() => setIsEditing(false)}>Cancel</button>
+          </div>
+        </div>
+        <textarea 
+          className="editor-content"
+          value={selectedNote.content}
+          onChange={(e) => setSelectedNote({...selectedNote, content: e.target.value})}
+          placeholder="Start typing your thoughts..."
+        />
+        <div style={{marginTop: '1rem', display: 'flex', gap: '8px', alignItems: 'center'}}>
+           <span style={{fontSize: '0.9rem', color: 'var(--text-muted)'}}>Tags:</span>
+           <input 
+            className="search-bar"
+            style={{flex: 1, borderRadius: '8px', padding: '6px 12px'}}
+            value={selectedNote.tags ? selectedNote.tags.join(", ") : ""}
+            onChange={(e) => setSelectedNote({...selectedNote, tags: e.target.value.split(",").map(t => t.trim())})}
+            placeholder="Add tags separated by commas..."
+          />
+        </div>
+      </div>
+    );
   }
 
   return (
-    <section className="panel-grid notes-layout">
-      <div className="panel form-panel">
-        <div className="panel-header">
-          <div>
-            <p className="panel-kicker">Notes system</p>
-            <h3>{editingId ? "Edit note" : "Create a note"}</h3>
-          </div>
-          <input
-            className="search-input"
-            value={filter}
-            onChange={(event) => setFilter(event.target.value)}
-            placeholder="Filter notes"
-          />
-        </div>
-
-        <div className="form-grid">
-          <label>
-            Title
-            <input
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              placeholder="A concise title"
-            />
-          </label>
-          <label>
-            Tags
-            <input
-              value={tags}
-              onChange={(event) => setTags(event.target.value)}
-              placeholder="ai, learning, exam"
-            />
-          </label>
-        </div>
-        <label>
-          Content
-          <textarea
-            value={content}
-            onChange={(event) => setContent(event.target.value)}
-            rows={8}
-            placeholder="Write your note here"
-          />
-        </label>
-
-        <div className="composer-actions">
-          <button
-            type="button"
-            className="primary-button"
-            onClick={saveNote}
-            disabled={busy}
-          >
-            {editingId ? "Update note" : "Add note"}
-          </button>
-          {editingId ? (
-            <button
-              type="button"
-              className="ghost-button"
-              onClick={() => setEditingId("")}
-            >
-              Cancel edit
-            </button>
-          ) : null}
-        </div>
+    <div className="notes-container">
+      <div className="notes-controls">
+        <div className="logo-icon" style={{background: '#E4E6EB', color: '#050505', minWidth: '40px'}}>Me</div>
+        <input 
+          className="search-bar"
+          placeholder="Search through your thoughts..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+        <button className="btn-add" onClick={handleCreate}>
+          New Thought
+        </button>
       </div>
 
-      <div className="note-grid">
-        {visibleNotes.map((note) => (
-          <article className="note-card panel" key={note.id}>
-            <div className="note-card-head">
-              <div>
-                <h4>{note.title}</h4>
-                <p>{note.updated_at}</p>
+      <div className="notes-list">
+        {filteredNotes.map(note => (
+          <div key={note.id} className="note-card" onClick={() => handleEdit(note)}>
+            <div style={{display: 'flex', gap: '12px', alignItems: 'flex-start', marginBottom: '12px'}}>
+              <div className="logo-icon" style={{background: 'var(--accent-soft)', color: 'var(--accent)', minWidth: '40px'}}>
+                {getInitials(note.title)}
               </div>
-              <span className="card-badge">
-                {(note.tags || []).length} tags
-              </span>
+              <div>
+                <h3 style={{margin: 0}}>{note.title || "Untitled Note"}</h3>
+                <span style={{fontSize: '0.8rem', color: 'var(--text-muted)'}}>{note.updated_at || "Just now"}</span>
+              </div>
+              {note.id && (
+                <button 
+                    onClick={(e) => { e.stopPropagation(); onDelete(note.id); }}
+                    style={{marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem'}}
+                    title="Delete"
+                >
+                    ×
+                </button>
+              )}
             </div>
-            <p className="note-summary">{note.content}</p>
-            <div className="pill-cloud">
-              {(note.tags || []).map((tag) => (
-                <span key={tag} className="pill">
-                  {tag}
-                </span>
+            <p>{note.content}</p>
+            <div className="note-tags">
+              {note.tags && note.tags.slice(0, 5).map(tag => (
+                <span key={tag} className="tag">{tag}</span>
               ))}
+              {note.tags && note.tags.length > 5 && <span className="tag">+{note.tags.length - 5} more</span>}
             </div>
-            <div className="card-actions">
-              <button
-                type="button"
-                className="ghost-button"
-                onClick={() => setEditingId(note.id)}
-              >
-                Edit
-              </button>
-              <button
-                type="button"
-                className="ghost-button"
-                onClick={() => openHistory(note.id)}
-              >
-                History
-              </button>
-              <button
-                type="button"
-                className="ghost-button danger"
-                onClick={() => removeNote(note.id)}
-              >
-                Delete
-              </button>
-            </div>
-          </article>
-        ))}
-      </div>
-
-      {historyForId ? (
-        <div className="panel history-panel">
-          <div className="panel-header">
-            <div>
-              <p className="panel-kicker">Version history</p>
-              <h3>Snapshots for {historyForId}</h3>
-            </div>
-            <button
-              type="button"
-              className="ghost-button"
-              onClick={() => {
-                setHistoryForId("");
-                setHistoryVersions([]);
-              }}
-            >
-              Close
-            </button>
           </div>
-
-          {historyBusy ? <p>Loading history...</p> : null}
-          {!historyBusy && historyVersions.length === 0 ? (
-            <p>No snapshots found for this note.</p>
-          ) : null}
-
-          {!historyBusy ? (
-            <ul className="compact-list">
-              {historyVersions.map((version) => (
-                <li key={version.file}>
-                  <strong>{version.title || "Untitled"}</strong>
-                  <span>
-                    {version.timestamp} · {version.reason}
-                  </span>
-                  <div className="card-actions">
-                    <button
-                      type="button"
-                      className="ghost-button"
-                      onClick={() => restoreVersion(historyForId, version.file)}
-                      disabled={busy}
-                    >
-                      Restore this version
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
-      ) : null}
-    </section>
+        ))}
+        {filteredNotes.length === 0 && (
+          <div style={{textAlign: 'center', padding: '4rem', background: 'var(--panel)', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow)'}}>
+            <p style={{color: 'var(--text-muted)'}}>No thoughts found. Start sharing your ideas!</p>
+          </div>
+        )}
+      </div>
+    </div>
   );
-}
+};
+
+export default Notes;

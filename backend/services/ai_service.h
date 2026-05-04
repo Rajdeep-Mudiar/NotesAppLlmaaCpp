@@ -13,7 +13,7 @@ public:
 
     nlohmann::json buildSearchResponse(const std::string & query, const std::string & mode, const std::string & persona) const;
     nlohmann::json buildInsights() const;
-    nlohmann::json buildFlashcards() const;
+    nlohmann::json buildFlashcards(int count = 5) const;
     nlohmann::json buildGraph() const;
     nlohmann::json buildContradictions() const;
     nlohmann::json buildLearningPath() const;

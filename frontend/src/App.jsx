@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
+import './styles/app.css';
+import './styles/chat.css';
 import Sidebar from "./components/Sidebar.jsx";
 import Chat from "./components/Chat.jsx";
 import Notes from "./components/Notes.jsx";
@@ -47,6 +49,49 @@ export default function App() {
   const [ideas, setIdeas] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [messages, setMessages] = useState([]);
+
+  async function handleChat(query, mode, persona) {
+    setBusy(true);
+    setError("");
+    const userMsg = { role: "user", text: query };
+    setMessages((prev) => [...prev, userMsg]);
+
+    try {
+      const data = await request("/search", { query, mode, persona });
+      const assistantMsg = { role: "assistant", text: data.answer || "No response." };
+      setMessages((prev) => [...prev, assistantMsg]);
+    } catch (e) {
+      setError("Chat error: " + e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleSaveNote(note) {
+    setBusy(true);
+    try {
+      await request("/save-note", note);
+      await refreshAll();
+    } catch (e) {
+      setError("Save failed: " + e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDeleteNote(id) {
+    if (!window.confirm("Are you sure?")) return;
+    setBusy(true);
+    try {
+      await request("/delete-note", { id });
+      await refreshAll();
+    } catch (e) {
+      setError("Delete failed: " + e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const stats = useMemo(
     () => ({
@@ -64,32 +109,20 @@ export default function App() {
     try {
       const [
         latestNotes,
-        insightsData,
         flashcardsData,
         graphData,
         contradictionsData,
-        learningPathData,
-        questionsData,
-        ideasData,
       ] = await Promise.all([
         loadNotes(),
-        request("/insights"),
         request("/flashcards"),
         request("/graph"),
         request("/contradictions"),
-        request("/learning-path"),
-        request("/questions"),
-        request("/ideas"),
       ]);
 
       setNotes(latestNotes);
-      setInsights(insightsData);
       setFlashcards(flashcardsData.flashcards || []);
       setGraph(graphData);
       setContradictions(contradictionsData.contradictions || []);
-      setLearningPath(learningPathData.learning_path || []);
-      setSelfQuestions(questionsData.self_questions || []);
-      setIdeas(ideasData.ideas || []);
     } catch (requestError) {
       setError(requestError.message || "Unable to sync with the backend");
     } finally {
@@ -103,70 +136,71 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <div className="ambient ambient-one" />
-      <div className="ambient ambient-two" />
       <Sidebar
-        activeView={activeView}
-        setActiveView={setActiveView}
         views={views}
-        stats={stats}
-        onRefresh={refreshAll}
-        busy={busy}
+        activeView={activeView}
+        onSwitch={setActiveView}
       />
 
       <main className="main-panel">
-        <section className="hero-card">
-          <div>
-            <p className="eyebrow">AI Second Brain Notes Application</p>
-            <h1>Store notes, ask questions, and learn from local AI.</h1>
-            <p className="hero-copy">
-              A privacy-focused workspace for notes, retrieval, flashcards,
-              contradictions, and knowledge graphs powered by llama.cpp.
-            </p>
-          </div>
-          <div className="hero-stats">
-            <div>
-              <span>{stats.notes}</span>
-              <label>Notes</label>
+        <header className="header-bar" style={{ marginBottom: "8px" }}>
+          <div className="hero-stats" style={{ background: "transparent", border: "none", boxShadow: "none", padding: 0 }}>
+            <div style={{ marginRight: "24px" }}>
+              <span style={{ fontSize: "1.5rem", fontWeight: "700" }}>{stats.notes}</span>
+              <label style={{ marginLeft: "8px", color: "var(--text-muted)", fontSize: "0.8rem" }}>Notes</label>
             </div>
-            <div>
-              <span>{stats.tags}</span>
-              <label>Tags</label>
-            </div>
-            <div>
-              <span>{stats.contradictions}</span>
-              <label>Conflicts</label>
+            <div style={{ marginRight: "24px" }}>
+              <span style={{ fontSize: "1.5rem", fontWeight: "700" }}>{stats.tags}</span>
+              <label style={{ marginLeft: "8px", color: "var(--text-muted)", fontSize: "0.8rem" }}>Tags</label>
             </div>
           </div>
-        </section>
+          {busy && <div className="tag" style={{ background: "var(--accent)", color: "white" }}>AI Active</div>}
+        </header>
 
-        {error ? <div className="error-banner">{error}</div> : null}
+        {error ? <div className="error-banner" style={{ margin: "0 0 16px 0", background: "var(--danger)", color: "white", padding: "12px", borderRadius: "var(--radius-md)", display: "flex", justifyContent: "space-between" }}>
+          <span>{error}</span>
+          <button onClick={() => setError("")} style={{ background: "transparent", border: "none", color: "white", cursor: "pointer", fontWeight: "bold" }}>×</button>
+        </div> : null}
 
-        {activeView === "chat" ? (
-          <Chat
-            notes={notes}
-            insights={insights}
-            onSync={refreshAll}
-            apiBase={API_BASE}
-          />
-        ) : null}
+        <div className="view-content">
+          {activeView === "chat" ? (
+            <Chat
+              messages={messages}
+              onSend={handleChat}
+              busy={busy}
+            />
+          ) : null}
 
-        {activeView === "notes" ? (
-          <Notes notes={notes} onChanged={refreshAll} apiBase={API_BASE} />
-        ) : null}
+          {activeView === "notes" ? (
+            <Notes 
+              notes={notes} 
+              onSave={handleSaveNote} 
+              onDelete={handleDeleteNote} 
+            />
+          ) : null}
 
-        {activeView === "flashcards" ? (
-          <Flashcards
-            flashcards={flashcards}
-            ideas={ideas}
-            learningPath={learningPath}
-            selfQuestions={selfQuestions}
-          />
-        ) : null}
+          {activeView === "flashcards" ? (
+            <Flashcards
+              flashcards={flashcards}
+              onGenerateFlashcards={async (count) => {
+                setBusy(true);
+                try {
+                  const data = await request("/flashcards", { count });
+                  setFlashcards(data.flashcards || []);
+                } catch (e) {
+                  setError("Failed to generate flashcards: " + e.message);
+                } finally {
+                  setBusy(false);
+                }
+              }}
+              busy={busy}
+            />
+          ) : null}
 
-        {activeView === "graph" ? (
-          <Graph graph={graph} contradictions={contradictions} />
-        ) : null}
+          {activeView === "graph" ? (
+            <Graph graph={graph} contradictions={contradictions} />
+          ) : null}
+        </div>
       </main>
     </div>
   );

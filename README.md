@@ -1,234 +1,146 @@
 # AI Second Brain Notes Application
 
-A privacy-focused, full-stack notes app with local AI features. Built for speed, privacy, and extensibility.
+A privacy-focused, full-stack notes app with local AI features and cloud persistence. Built for speed, privacy, and extensibility.
 
 **Tech Stack:**
 
-- Frontend: React + Vite (JSX)
-- Backend: Pure C++ (custom HTTP server)
-- Local AI: [llama.cpp](https://github.com/ggerganov/llama.cpp)
-- Storage: File-based JSON notes with version history
+- **Frontend:** React + Vite (Modern JSX)
+- **Backend:** Pure C++20 (Custom HTTP/Socket server)
+- **Database:** MongoDB (via Python Storage Bridge)
+- **Local AI:** [llama.cpp](https://github.com/ggerganov/llama.cpp) (Streaming SSE & RAG)
+- **Orchestration:** PowerShell / Bash
 
 ---
 
 ## Project Structure
 
-- `backend/` — C++ API server, RAG logic, note storage
-- `frontend/` — React UI
-- `data/notes/` — note files (`.json`) and version snapshots
-- `models/` — local GGUF model files
+- `backend/` — C++ API server and RAG logic.
+- `frontend/` — React UI.
+- `llama.cpp/` — Submodule/Folder for the inference engine.
+- `models/` — Local GGUF model files.
+- `data/` — Local cache and temporary storage.
 
 ---
 
 ## Features
 
-- Add, edit, delete notes
-- Auto-tagging for notes
-- RAG chat (`/search`) and streaming chat (`/search/stream`)
-- Flashcards, knowledge graph, contradictions, ideas, learning path
-- Note version history and restore
+- **Note Management:** Add, edit, delete notes with auto-tagging.
+- **RAG Chat:** Chat with your notes using local LLMs.
+- **Streaming UI:** Real-time AI responses via Server-Sent Events (SSE).
+- **Advanced Insights:** Knowledge graphs, flashcards, contradiction detection, and learning paths.
+- **Version History:** Snapshotting and restoration of previous note versions.
+- **Cloud Persistence:** Securely sync notes to MongoDB Atlas or a local instance.
 
 ---
 
 ## Prerequisites
 
+### General
+- **Node.js 18+** & **npm 9+**
+- **Python 3.10+** (with `pymongo` and `python-dotenv`)
+- **g++** with C++20 support (MinGW-w64 recommended on Windows)
+- **CMake** (required for building llama.cpp)
+- **MongoDB** (Atlas connection string or local instance)
+
 ### Windows
-
-- Node.js 18+
-- npm 9+
-- g++ with C++20 support (MinGW recommended)
-- CMake (optional, for llama.cpp)
-
-### Linux
-
-- Node.js 18+
-- npm 9+
-- g++
-- cmake, make
+- [Git for Windows](https://git-scm.com/)
+- [MinGW-w64](https://www.mingw-w64.org/) or MSVC
+- [CMake](https://cmake.org/download/)
 
 ---
 
-## Required Environment Variables
+## Environment Variables
 
-### Backend
+Create a `.env` file in the `backend/` directory:
 
-| Variable                    | Required               | Default             | Description                  |
-| --------------------------- | ---------------------- | ------------------- | ---------------------------- |
-| `SECOND_BRAIN_PORT`         | No                     | `8080`              | Backend port                 |
-| `SECOND_BRAIN_DATA_DIR`     | No                     | `data/notes`        | Notes storage directory      |
-| `SECOND_BRAIN_LLAMA_BINARY` | Yes (for AI responses) | `llama-cli`         | Path to llama.cpp CLI binary |
-| `SECOND_BRAIN_MODEL_PATH`   | Yes (for AI responses) | `models/model.gguf` | Path to GGUF model           |
-
-### Frontend
-
-| Variable            | Required | Default                 | Description      |
-| ------------------- | -------- | ----------------------- | ---------------- |
-| `VITE_API_BASE_URL` | No       | `http://127.0.0.1:8080` | Backend base URL |
+| Variable | Required | Description |
+| :--- | :--- | :--- |
+| `MONGO_DB_URL` | **Yes** | Your MongoDB connection string. |
+| `SECOND_BRAIN_LLAMA_BINARY` | **Yes** | Path to `llama-cli.exe` or `llama-server.exe`. |
+| `SECOND_BRAIN_MODEL_PATH` | **Yes** | Path to your `.gguf` model file. |
+| `SECOND_BRAIN_PORT` | No | Backend port (Default: `8080`). |
+| `SECOND_BRAIN_PYTHON` | No | Path to python executable if not in PATH. |
+| `VITE_API_BASE_URL` | No | Frontend API endpoint (Default: `http://127.0.0.1:8080`). |
 
 ---
 
-## Installation & Local Development
+## How to Run
 
-### 1. Clone the repository
-
+### 1. Initial Setup
 ```bash
+# Clone the repository
 git clone <your-repo-url>
 cd NotesAppLlmaaCpp
+
+# Install Python dependencies
+pip install pymongo python-dotenv
 ```
 
-### 2. Get llama.cpp (if missing)
-
-```bash
-git clone https://github.com/ggerganov/llama.cpp.git
-# or
-git clone https://github.com/ggml-org/llama.cpp.git
-```
-
-### 3. Build llama.cpp CLI
-
+### 2. Build llama.cpp
 ```bash
 cd llama.cpp
 cmake -S . -B build
-cmake --build build -j
-# On Windows, use CMake GUI or run in Developer PowerShell if needed
+cmake --build build --config Debug -j # Or Release
 ```
 
-The binary will be at:
-
-- Linux/macOS: `llama.cpp/build/bin/llama-cli`
-- Windows: `llama.cpp/build/bin/llama-cli.exe`
-
-### 4. Place your model
-
-Download a GGUF model and place it at `models/model.gguf` or set `SECOND_BRAIN_MODEL_PATH` to your model location.
-
-### 5. Build and run the backend
-
-#### Windows (PowerShell)
-
+### 3. Quick Start (Windows)
+The easiest way to start the entire stack is using the provided PowerShell script:
 ```powershell
+.\start-dev.ps1
+```
+This script will:
+- Check/Compile the C++ backend.
+- Launch `llama-server` on port 8081.
+- Start the C++ Backend on port 8080.
+- Start the Vite Frontend on port 5173.
+
+### 4. Manual Start (Cross-Platform)
+
+#### A. Start the Backend
+```bash
 cd backend
+# Compile (example for Windows/MinGW)
 g++ -std=c++20 -I. -I..\llama.cpp\vendor server.cpp core\ai_engine.cpp services\notes_service.cpp services\ai_service.cpp -lws2_32 -o second_brain_server.exe
 
-# Set environment variables (edit paths as needed)
-$env:SECOND_BRAIN_PORT="8080"
-$env:SECOND_BRAIN_DATA_DIR="..\data\notes"
-$env:SECOND_BRAIN_LLAMA_BINARY="..\llama.cpp\build\bin\llama-cli.exe"
-$env:SECOND_BRAIN_MODEL_PATH="..\models\model.gguf"
-
+# Run (Ensure .env is configured)
 .\second_brain_server.exe
 ```
 
-#### Linux
-
-```bash
-cd backend
-g++ -std=c++20 -I. -I../llama.cpp/vendor server.cpp core/ai_engine.cpp services/notes_service.cpp services/ai_service.cpp -o second_brain_server
-
-export SECOND_BRAIN_PORT=8080
-export SECOND_BRAIN_DATA_DIR=../data/notes
-export SECOND_BRAIN_LLAMA_BINARY=../llama.cpp/build/bin/llama-cli
-export SECOND_BRAIN_MODEL_PATH=../models/model.gguf
-
-./second_brain_server
-```
-
-### 6. Install and run the frontend
-
-In a new terminal:
-
+#### B. Start the Frontend
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-Frontend: [http://127.0.0.1:5173](http://127.0.0.1:5173)
-Backend: [http://127.0.0.1:8080](http://127.0.0.1:8080)
-
-### 7. One-command start (Windows)
-
-```powershell
-.\start-dev.ps1
-```
-
 ---
 
 ## API Endpoints
 
-- `GET /health` — Health check
-- `GET /notes` — List notes
-- `POST /add` — Add note
-- `POST /update` — Update note
-- `POST /delete` — Delete note
-- `POST /search` — RAG search
-- `POST /search/stream` — Streaming search (SSE)
-- `POST /insights` — Insights
-- `POST /flashcards` — Flashcards
-- `POST /graph` — Knowledge graph
-- `POST /contradictions` — Contradictions
-- `POST /learning-path` — Learning path
-- `POST /questions` — Questions
-- `POST /ideas` — Ideas
-- `POST /history` — Note history
-- `POST /restore-version` — Restore note version
-
----
-
-## Deployment
-
-### Backend on Render
-
-Recommended: Deploy as Docker Web Service.
-
-1. Create Render Web Service from your GitHub repo.
-2. Use Docker runtime with `backend/` as root directory.
-3. Add persistent disk mounted at `/var/data`.
-4. Add env vars:
-
-```
-SECOND_BRAIN_PORT=10000
-SECOND_BRAIN_DATA_DIR=/var/data/notes
-SECOND_BRAIN_LLAMA_BINARY=/opt/llama.cpp/build/bin/llama-cli
-SECOND_BRAIN_MODEL_PATH=/var/data/models/model.gguf
-```
-
-5. Ensure model file exists at `/var/data/models/model.gguf`.
-6. Expose and verify `https://<render-service>.onrender.com/health`.
-
-**Note:** Large GGUF models may exceed Render free/low-tier resources.
-
-### Frontend on Vercel
-
-1. Import GitHub repo in Vercel.
-2. Set project root to `frontend`.
-3. Build settings:
-
-- Build command: `npm run build`
-- Output directory: `dist`
-
-4. Add env var:
-
-```
-VITE_API_BASE_URL=https://<your-render-backend>.onrender.com
-```
-
-5. Deploy.
+- `GET /health` — System status.
+- `GET /notes` — Fetch all notes from MongoDB.
+- `POST /add` — Create a new note.
+- `POST /search` — AI search/chat (Standard).
+- `POST /search/stream` — AI search/chat (Streaming SSE).
+- `POST /insights` — Generate note metrics.
+- `POST /flashcards` — Generate study cards from notes.
+- `POST /graph` — Get Knowledge Graph data.
 
 ---
 
 ## Troubleshooting
 
-- **Frontend port conflict:**
-  - Run: `npm run dev -- --port 5174`
-- **Backend returns fallback answer only:**
-  - Check `SECOND_BRAIN_LLAMA_BINARY` and `SECOND_BRAIN_MODEL_PATH` are correct and model exists
-- **Streaming not visible:**
-  - Ensure frontend uses `/search/stream`
-  - Ensure reverse proxy disables buffering for SSE
+- **"ModuleNotFoundError: No module named 'pymongo'"**:
+  Run `pip install pymongo python-dotenv`.
+- **Backend fails to connect to MongoDB**:
+  Check your `MONGO_DB_URL` in `backend/.env`. Ensure your IP is whitelisted in MongoDB Atlas.
+- **AI responses are slow or empty**:
+  The first query usually takes longer as the model loads into memory. Ensure `SECOND_BRAIN_MODEL_PATH` points to a valid `.gguf` file.
+- **C++ Build Errors**:
+  Ensure you have a modern compiler supporting C++20. Use `g++ --version` to check.
 
 ---
 
 ## License
 
-This project is for educational and personal use. See LICENSE for details.
+Personal and Educational use only. Built with ❤️ for the AI Second Brain community.

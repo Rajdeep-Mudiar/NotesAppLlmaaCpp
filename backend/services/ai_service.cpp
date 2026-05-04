@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <iostream>
 #include <set>
 #include <sstream>
 #include <unordered_map>
@@ -88,22 +89,23 @@ std::string AiService::modeInstruction(const std::string & mode, const std::stri
 
 std::string AiService::fallbackAnswer(const std::string & query, const std::vector<NoteRecord> & notes) {
     if (notes.empty()) {
-        return "I could not find any notes related to: " + query + ".";
+        return "I couldn't find any information about '" + query + "' in your notes.";
     }
 
     std::ostringstream out;
-    out << "I found " << notes.size() << " note(s) related to your question. Key points: ";
+    out << "I couldn't generate a direct AI answer, but I found relevant info in these notes: ";
     for (std::size_t i = 0; i < notes.size(); ++i) {
-        if (i != 0) {
-            out << " | ";
-        }
-        out << notes[i].title << ": " << summarize(notes[i].content);
+        if (i != 0) out << ", ";
+        out << notes[i].title;
     }
     return out.str();
 }
 
 nlohmann::json AiService::buildSearchResponse(const std::string & query, const std::string & mode, const std::string & persona) const {
+    std::cout << "[AI] Searching for: \"" << query << "\"" << std::endl;
+    // Reduce from 8 to 4 to stay within context limits
     const auto relevant_notes = notes_service_.searchNotes(query, 4);
+    std::cout << "[AI] Found " << relevant_notes.size() << " relevant notes." << std::endl;
 
     std::ostringstream context;
     for (const auto & note : relevant_notes) {
@@ -113,16 +115,19 @@ nlohmann::json AiService::buildSearchResponse(const std::string & query, const s
     }
 
     const std::string prompt =
-        "You are an AI Second Brain assistant. Answer ONLY from the provided notes. "
-        "If the notes do not contain enough information, say what is missing. Do not invent facts.\n\n"
-        + modeInstruction(mode, persona) + "\n\n"
-        "Notes:\n" + context.str() + "\n"
-        "User question: " + query + "\n\n"
-        "Answer (be concise and cite note titles):";
+        "System: You are an AI Second Brain. Use the provided notes to answer. If unsure, say you don't know.\n\n"
+        "Context (Your Notes):\n" + context.str() + "\n"
+        "Style: " + modeInstruction(mode, persona) + "\n\n"
+        "User: " + query + "\n"
+        "Assistant: @@@ANSWER_START@@@\n";
 
-    std::string answer = ai_engine_.generate(prompt, 256);
+    std::cout << "[AI] Generating answer..." << std::endl;
+    std::string answer = ai_engine_.generate(prompt, 512);
     if (answer.empty()) {
+        std::cout << "[AI] Generation failed, using fallback." << std::endl;
         answer = fallbackAnswer(query, relevant_notes);
+    } else {
+        std::cout << "[AI] Answer generated successfully." << std::endl;
     }
 
     nlohmann::json response;
@@ -170,18 +175,59 @@ nlohmann::json AiService::buildInsights() const {
     return insights;
 }
 
-nlohmann::json AiService::buildFlashcards() const {
-    const auto notes = notes_service_.loadNotes();
-    nlohmann::json flashcards = nlohmann::json::array();
+nlohmann::json AiService::buildFlashcards(int count) const {
+    auto notes = notes_service_.loadNotes();
+    if (notes.empty()) {
+        return {{"flashcards", nlohmann::json::array()}};
+    }
+
+    // Limit to 10 most recent notes for flashcard generation context
+    if (notes.size() > 10) {
+        notes.resize(10);
+    }
+
+    std::ostringstream context;
     for (const auto & note : notes) {
-        const auto sentences = splitSentences(note.content);
-        const std::string answer = sentences.empty() ? summarize(note.content) : sentences.front();
-        flashcards.push_back({
-            {"id", note.id},
-            {"front", "What is the main idea of \"" + note.title + "\"?"},
-            {"back", answer},
-            {"tags", note.tags}
-        });
+        context << "Title: " << note.title << "\nContent: " << note.content << "\n---\n";
+    }
+
+    const std::string prompt =
+        "You are an expert tutor. Based on the notes below, generate exactly " + std::to_string(count) + " flashcards.\n"
+        "Rules:\n"
+        "1. Each flashcard must have a 'front' (question) and a 'back' (detailed answer).\n"
+        "2. The questions should be challenging and focus on key concepts from the notes.\n"
+        "3. Output ONLY a JSON array of objects. Format: [{\"front\": \"...\", \"back\": \"...\"}, ...]\n\n"
+        "Notes:\n" + context.str() + "\n"
+        "JSON Flashcards:\n"
+        "@@@JSON_START@@@\n";
+
+    std::string response = ai_engine_.generate(prompt, 1024); // Increased to 1024 for more cards
+    nlohmann::json flashcards = nlohmann::json::array();
+    try {
+        // Try to find the JSON array in the response
+        auto start = response.find('[');
+        auto end = response.rfind(']');
+        if (start != std::string::npos && end != std::string::npos && end > start) {
+            std::string json_str = response.substr(start, end - start + 1);
+            flashcards = nlohmann::json::parse(json_str);
+        } else {
+            // Fallback: simple split if AI fails to give JSON
+            std::cerr << "[WARN] Flashcard generation did not return valid JSON, using simple fallback." << std::endl;
+        }
+    } catch (...) {
+        std::cerr << "[ERROR] Failed to parse flashcards JSON." << std::endl;
+    }
+
+    // If AI failed or returned empty, do a basic fallback
+    if (flashcards.empty() || !flashcards.is_array()) {
+        flashcards = nlohmann::json::array();
+        for (std::size_t i = 0; i < std::min<std::size_t>(notes.size(), static_cast<std::size_t>(count)); ++i) {
+            const auto sentences = splitSentences(notes[i].content);
+            flashcards.push_back({
+                {"front", "Question about " + notes[i].title},
+                {"back", sentences.empty() ? notes[i].content : sentences.front()}
+            });
+        }
     }
 
     return {{"flashcards", flashcards}};

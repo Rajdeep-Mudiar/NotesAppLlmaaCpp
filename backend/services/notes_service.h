@@ -16,7 +16,7 @@ struct NoteRecord {
 
 class NotesService {
 public:
-    explicit NotesService(std::string base_directory);
+    explicit NotesService(std::string base_directory, std::string executable_dir = "");
 
     NoteRecord addNote(const std::string & title, const std::string & content, const std::vector<std::string> & tags = {});
     bool updateNote(const std::string & id, const std::string & title, const std::string & content, const std::vector<std::string> & tags = {});
@@ -34,6 +34,7 @@ public:
 
 private:
     std::string base_directory_;
+    std::string executable_dir_;
 
     static std::string nowIso8601();
     static std::string newId();
