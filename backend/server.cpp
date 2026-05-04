@@ -363,7 +363,12 @@ json handleRequest(const HttpRequest & request, AppContext & app) {
         if (request.method == "POST" && request.path == "/flashcards") {
             const auto body = parseJsonBody(request.body);
             const int count = body.value("count", 5);
-            return app.ai_service.buildFlashcards(count);
+            const std::string difficulty = body.value("difficulty", "medium");
+            std::vector<std::string> noteIds;
+            if (body.contains("noteIds") && body["noteIds"].is_array()) {
+                noteIds = body["noteIds"].get<std::vector<std::string>>();
+            }
+            return app.ai_service.buildFlashcards(count, difficulty, noteIds);
         }
 
         if (request.method == "POST" && request.path == "/graph") {
@@ -454,8 +459,10 @@ void handleClient(socket_t client_socket, AppContext & app) {
         }
 
         const json response_body = handleRequest(request, app);
+        std::cout << "[DEBUG] Finished handleRequest for " << request.path << std::endl;
         const std::string response_data = makeResponse(response_body.contains("error") ? 400 : 200, response_body);
         sendAll(client_socket, response_data);
+        std::cout << "[INFO] Sent response for " << request.path << std::endl;
     } catch (const std::exception & e) {
         std::cerr << "[ERROR] handleClient exception: " << e.what() << std::endl;
         try {

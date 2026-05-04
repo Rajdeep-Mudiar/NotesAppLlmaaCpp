@@ -53,7 +53,9 @@ export default function Chat({ messages, onSend, busy }) {
         {messages.map((msg, i) => (
           <div key={i} className={`message-row ${msg.role}`}>
             {msg.role === 'assistant' && (
-              <div className="avatar assistant-avatar">AI</div>
+              <div className="avatar assistant-avatar" title="AI Assistant">
+                <img src="/assets/chatbot.png" alt="AI" style={{ width: '100%', height: '100%', borderRadius: 'inherit', objectFit: 'cover' }} />
+              </div>
             )}
             <div className={`message ${msg.role}`}>
               <div className="message-text">
@@ -61,14 +63,18 @@ export default function Chat({ messages, onSend, busy }) {
               </div>
             </div>
             {msg.role === 'user' && (
-              <div className="avatar user-avatar">U</div>
+              <div className="avatar user-avatar" title="You">
+                <img src="/assets/user.png" alt="U" style={{ width: '100%', height: '100%', borderRadius: 'inherit', objectFit: 'cover' }} />
+              </div>
             )}
           </div>
         ))}
 
         {busy && (
           <div className="message-row assistant">
-            <div className="avatar assistant-avatar">AI</div>
+            <div className="avatar assistant-avatar pulse">
+              <img src="/assets/chatbot.png" alt="AI" style={{ width: '100%', height: '100%', borderRadius: 'inherit', objectFit: 'cover' }} />
+            </div>
             <div className="message assistant">
               <div className="loading-dots">Consulting brain & notes...</div>
             </div>

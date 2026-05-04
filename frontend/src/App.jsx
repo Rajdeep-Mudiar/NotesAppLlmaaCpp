@@ -182,10 +182,11 @@ export default function App() {
           {activeView === "flashcards" ? (
             <Flashcards
               flashcards={flashcards}
-              onGenerateFlashcards={async (count) => {
+              notes={notes}
+              onGenerateFlashcards={async (count, difficulty, noteIds) => {
                 setBusy(true);
                 try {
-                  const data = await request("/flashcards", { count });
+                  const data = await request("/flashcards", { count, difficulty, noteIds });
                   setFlashcards(data.flashcards || []);
                 } catch (e) {
                   setError("Failed to generate flashcards: " + e.message);

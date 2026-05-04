@@ -1,149 +1,177 @@
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
+import "../styles/flashcards.css";
 
-export default function Flashcards({ flashcards, onGenerateFlashcards, busy }) {
+export default function Flashcards({ flashcards, notes, onGenerateFlashcards, busy }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
+  const [configuring, setConfiguring] = useState(true);
+
+  // Form states
   const [count, setCount] = useState(5);
+  const [difficulty, setDifficulty] = useState("medium");
+  const [selectedNoteIds, setSelectedNoteIds] = useState([]);
 
   const activeCard = flashcards[activeIndex] || null;
+  const progress = flashcards.length > 0 ? ((activeIndex + 1) / flashcards.length) * 100 : 0;
+
+  const handleToggleNote = (id) => {
+    setSelectedNoteIds(prev => 
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
 
   const handleGenerate = async () => {
     if (busy) return;
-    await onGenerateFlashcards(count);
+    await onGenerateFlashcards(count, difficulty, selectedNoteIds);
     setActiveIndex(0);
     setFlipped(false);
+    setConfiguring(false);
   };
 
-  return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "var(--bg)" }}>
-      <div className="header-bar">
-        <h3>Memory Brain</h3>
-        <div className="controls-row" style={{ alignItems: "center" }}>
-          <span style={{ fontSize: "0.85rem", color: "var(--text-muted)", fontWeight: '600' }}>Cards:</span>
-          <input
-            type="number"
-            className="select-modern"
-            style={{ width: "60px", background: '#F0F2F5', border: 'none', borderRadius: '8px' }}
-            value={count}
-            min="1"
-            max="20"
-            onChange={(e) => setCount(parseInt(e.target.value) || 5)}
-          />
-          <button className="btn-add" onClick={handleGenerate} disabled={busy}>
-            {busy ? "Thinking..." : "Generate Deck"}
+  if (configuring) {
+    return (
+      <div className="flashcards-view" style={{ padding: '2rem' }}>
+        <div className="setup-container">
+          <header style={{ marginBottom: '2.5rem', textAlign: 'center' }}>
+            <h1 style={{ fontSize: '2rem', fontWeight: '800', color: '#0f172a', marginBottom: '0.5rem' }}>Study Lab</h1>
+            <p style={{ color: '#64748b' }}>Configure your active recall session</p>
+          </header>
+
+          <div className="setup-step">
+            <label><span className="step-num">1</span> How many cards?</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                <input 
+                    type="range" min="3" max="20" step="1"
+                    style={{ flex: 1, accentColor: 'var(--accent)' }}
+                    value={count}
+                    onChange={e => setCount(parseInt(e.target.value))}
+                />
+                <span style={{ fontWeight: '800', fontSize: '1.2rem', color: 'var(--accent)', minWidth: '30px' }}>{count}</span>
+            </div>
+          </div>
+
+          <div className="setup-step">
+            <label><span className="step-num">2</span> Select Difficulty</label>
+            <div className="difficulty-picker">
+              {['easy', 'medium', 'hard'].map(d => (
+                <button 
+                  key={d}
+                  className={`difficulty-btn ${difficulty === d ? 'active' : ''}`}
+                  onClick={() => setDifficulty(d)}
+                >
+                  {d}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="setup-step">
+            <label><span className="step-num">3</span> Source Notes ({selectedNoteIds.length})</label>
+            <div className="notes-selector">
+              {notes.map(note => (
+                <div 
+                  key={note.id} 
+                  className={`note-option ${selectedNoteIds.includes(note.id) ? 'selected' : ''}`}
+                  onClick={() => handleToggleNote(note.id)}
+                >
+                  <div style={{ 
+                      width: '20px', height: '20px', borderRadius: '5px', 
+                      border: '2px solid #e2e8f0', display: 'flex', alignItems: 'center', 
+                      justifyContent: 'center', background: selectedNoteIds.includes(note.id) ? 'var(--accent)' : 'white',
+                      borderColor: selectedNoteIds.includes(note.id) ? 'var(--accent)' : '#e2e8f0'
+                  }}>
+                      {selectedNoteIds.includes(note.id) && <span style={{ color: 'white', fontSize: '12px' }}>✓</span>}
+                  </div>
+                  <span style={{ fontWeight: '600' }}>{note.title}</span>
+                </div>
+              ))}
+              {notes.length === 0 && <p style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>No notes available to generate from.</p>}
+            </div>
+          </div>
+
+          <button 
+            className="btn-add" 
+            style={{ width: '100%', height: '60px', borderRadius: '18px', fontSize: '1.1rem', fontWeight: '700', marginTop: '1rem' }}
+            disabled={busy || notes.length === 0}
+            onClick={handleGenerate}
+          >
+            {busy ? "🧠 Synthesizing Deck..." : "Launch Session"}
           </button>
         </div>
       </div>
+    );
+  }
 
-      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "40px" }}>
+  return (
+    <div className="flashcards-view">
+      <div className="header-bar" style={{ padding: '1.5rem 2rem', background: 'white', borderBottom: '1px solid #f1f5f9' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{ background: 'var(--accent)', color: 'white', padding: '8px', borderRadius: '10px' }}>📚</div>
+            <h3 style={{ fontWeight: '800' }}>Study Session</h3>
+        </div>
+        <button className="btn-add" style={{ background: '#f1f5f9', color: '#475569', fontSize: '0.9rem' }} onClick={() => setConfiguring(true)}>
+          Exit Session
+        </button>
+      </div>
+
+      <div className="card-scene">
+        {activeCard && (
+           <div className="progress-container">
+             <div className="progress-bar" style={{ width: `${progress}%` }}></div>
+           </div>
+        )}
+
         {activeCard ? (
-          <div
-            style={{
-              width: "100%",
-              maxWidth: "450px",
-              height: "550px",
-              perspective: "1200px",
-              cursor: "pointer",
-            }}
-            onClick={() => setFlipped(!flipped)}
-          >
-            <div
-              style={{
-                position: "relative",
-                width: "100%",
-                height: "100%",
-                transition: "transform 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275)",
-                transformStyle: "preserve-3d",
-                transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
-              }}
-            >
-              {/* Front Side */}
-              <div
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  backfaceVisibility: "hidden",
-                  background: "white",
-                  boxShadow: 'var(--shadow-lg)',
-                  borderRadius: "24px",
-                  display: "flex",
-                  flexDirection: 'column',
-                  alignItems: "center",
-                  justifyContent: "center",
-                  padding: "48px",
-                  textAlign: "center",
-                }}
-              >
-                <div style={{ position: 'absolute', top: '24px', fontSize: '0.8rem', color: 'var(--accent)', fontWeight: '700', letterSpacing: '0.1em' }}>QUESTION</div>
-                <div style={{ fontSize: "1.5rem", fontWeight: "700", color: '#050505', lineHeight: '1.4' }}>
-                  {activeCard.front}
-                </div>
-                <div style={{ position: 'absolute', bottom: '24px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>Tap to reveal answer</div>
+          <div className={`study-card ${flipped ? 'flipped' : ''}`} onClick={() => setFlipped(!flipped)}>
+            <div className="card-inner">
+              <div className="card-face card-front">
+                <span className="card-tag" style={{ color: 'var(--accent)' }}>QUESTION</span>
+                <div className="card-content">{activeCard.front}</div>
+                <div style={{ marginTop: 'auto', color: '#94a3b8', fontSize: '0.9rem', fontWeight: '600' }}>Click to Flip</div>
               </div>
-
-              {/* Back Side */}
-              <div
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  backfaceVisibility: "hidden",
-                  background: "var(--accent-gradient)",
-                  color: "white",
-                  boxShadow: 'var(--shadow-lg)',
-                  borderRadius: "24px",
-                  display: "flex",
-                  flexDirection: 'column',
-                  alignItems: "center",
-                  justifyContent: "center",
-                  padding: "48px",
-                  textAlign: "center",
-                  transform: "rotateY(180deg)",
-                }}
-              >
-                 <div style={{ position: 'absolute', top: '24px', fontSize: '0.8rem', color: 'rgba(255,255,255,0.8)', fontWeight: '700', letterSpacing: '0.1em' }}>ANSWER</div>
-                 <div style={{ fontSize: "1.3rem", fontWeight: "600", lineHeight: '1.6' }}>
-                  {activeCard.back}
-                </div>
+              <div className="card-face card-back">
+                <span className="card-tag">ANSWER</span>
+                <div className="card-content">{activeCard.back}</div>
+                <div style={{ marginTop: 'auto', color: 'rgba(255,255,255,0.7)', fontSize: '0.9rem', fontWeight: '600' }}>Click to Hide</div>
               </div>
             </div>
           </div>
         ) : (
-          <div style={{ textAlign: "center", background: 'white', padding: '40px', borderRadius: '24px', boxShadow: 'var(--shadow)' }}>
-            <div style={{ fontSize: '3rem', marginBottom: '16px' }}>📚</div>
-            <p style={{ color: "var(--text-muted)", fontWeight: '600' }}>Your knowledge deck is empty.</p>
-            <p style={{ color: "var(--text-muted)", fontSize: '0.9rem', marginTop: '8px' }}>Generate cards from your notes to start active recall.</p>
+          <div className="setup-container" style={{ textAlign: 'center', padding: '4rem 2rem' }}>
+            <div style={{ fontSize: '4rem', marginBottom: '1.5rem' }}>🎯</div>
+            <h2 style={{ fontWeight: '800', marginBottom: '1rem' }}>Session Complete!</h2>
+            <p style={{ color: '#64748b', marginBottom: '2rem' }}>Great job with your active recall. Ready for another round?</p>
+            <button className="btn-add" style={{ padding: '1rem 3rem' }} onClick={() => setConfiguring(true)}>Start New Deck</button>
           </div>
         )}
       </div>
 
-      {flashcards.length > 0 && (
-        <div style={{ padding: "32px", display: "flex", justifyContent: "center", gap: "24px" }}>
+      {flashcards.length > 0 && activeCard && (
+        <div className="study-nav">
           <button
-            className="nav-item"
-            style={{ padding: '8px 24px', borderRadius: '20px', border: '1px solid var(--border)' }}
+            className="nav-circle-btn"
             onClick={(e) => {
                 e.stopPropagation();
-                setActiveIndex((prev) => (prev > 0 ? prev - 1 : prev));
+                setActiveIndex(prev => prev - 1);
                 setFlipped(false);
             }}
             disabled={activeIndex === 0}
           >
-            ← Back
+            ←
           </button>
-          <div style={{ display: "flex", alignItems: "center", fontWeight: "700", color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+          <div style={{ fontSize: '1.1rem', fontWeight: '800', color: '#1e293b', minWidth: '80px', textAlign: 'center' }}>
             {activeIndex + 1} / {flashcards.length}
           </div>
           <button
-            className="nav-item"
-            style={{ padding: '8px 24px', borderRadius: '20px', border: '1px solid var(--border)' }}
+            className="nav-circle-btn"
             onClick={(e) => {
                 e.stopPropagation();
-                setActiveIndex((prev) => (prev < flashcards.length - 1 ? prev + 1 : prev));
+                setActiveIndex(prev => prev + 1);
                 setFlipped(false);
             }}
             disabled={activeIndex === flashcards.length - 1}
           >
-            Next →
+            →
           </button>
         </div>
       )}

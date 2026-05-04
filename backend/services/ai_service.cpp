@@ -197,40 +197,62 @@ nlohmann::json AiService::buildInsights() const {
     return insights;
 }
 
-nlohmann::json AiService::buildFlashcards(int count) const {
-    auto notes = notes_service_.loadNotes();
-    if (notes.empty()) {
+nlohmann::json AiService::buildFlashcards(int count, const std::string & difficulty, const std::vector<std::string> & noteIds) const {
+    auto all_notes = notes_service_.loadNotes();
+    std::vector<NoteRecord> filtered_notes;
+
+    if (noteIds.empty()) {
+        filtered_notes = all_notes;
+    } else {
+        for (const auto & id : noteIds) {
+            for (const auto & note : all_notes) {
+                if (note.id == id) {
+                    filtered_notes.push_back(note);
+                    break;
+                }
+            }
+        }
+    }
+
+    if (filtered_notes.empty()) {
         return {{"flashcards", nlohmann::json::array()}};
     }
 
-    // Sort notes by update time (newest first) but don't hard-cap yet
     std::ostringstream context;
     int char_count = 0;
-    for (const auto & note : notes) {
-        std::string entry = "[Note: " + note.title + "]\n" + note.content + "\n---\n";
-        if (char_count + entry.size() > 1200) break; // Reduced to fit within 2048 tokens safely
+    for (const auto & note : filtered_notes) {
+        std::string entry = "ID: " + note.id + "\nTITLE: " + note.title + "\nCONTENT: " + note.content + "\n---\n";
+        if (char_count + entry.size() > 1400) break; 
         context << entry;
         char_count += (int)entry.size();
     }
 
     const std::string prompt =
         "<|system|>\n"
-        "You are a study expert. Generate " + std::to_string(count) + " UNIQUE and DIVERSE flashcards covering ALL provided notes.\n"
-        "Do NOT repeat the same concept. Each card must focus on a different detail or fact.\n"
-        "Return ONLY a JSON array: [{\"front\": \"...\", \"back\": \"...\"}]\n"
-        "Notes:\n" + context.str() + "</s>\n"
+        "You are an Information Architect. Extract " + std::to_string(count) + " KEY CONCEPTS from the NOTES.\n"
+        "GOAL: Provide information cards, NOT questions/answers.\n"
+        "REQUIREMENTS:\n"
+        "1. 'front' MUST be the NAME of a concept or topic from the notes (1-3 words).\n"
+        "2. 'back' MUST be a concise SUMMARY of the most important info about that topic.\n"
+        "3. DO NOT use question marks. ONLY provide facts.\n"
+        "EXAMPLES:\n"
+        "- front: \"Neural Networks\", back: \"Computational models inspired by the human brain, used to recognize patterns and solve complex problems.\"\n"
+        "- front: \"Deep Learning\", back: \"A subset of ML that uses multi-layered neural networks for high-level abstraction.\"\n"
+        "NOTES:\n" + context.str() + "</s>\n"
         "<|user|>\n"
-        "Generate " + std::to_string(count) + " distinct flashcards based on these notes.</s>\n"
+        "Create " + std::to_string(count) + " info-cards in JSON format: [{\"front\": \"...\", \"back\": \"...\"}]</s>\n"
         "<|assistant|>\n"
-        "@@@JSON_START@@@\n";
+        "["; 
 
-    std::string response = ai_engine_.generate(prompt, 1500);
+    std::string response = ai_engine_.generate(prompt, 1024);
+    if (response.find('[') != 0) response = "[" + response; // Ensure it starts with [
+    
     nlohmann::json flashcards = nlohmann::json::array();
     
     try {
         auto start = response.find('[');
         auto end = response.rfind(']');
-        if (start != std::string::npos && end != std::string::npos && end > start) {
+        if (start != std::string::npos && end != std::string::npos && end >= start) {
             std::string json_str = response.substr(start, end - start + 1);
             auto parsed = nlohmann::json::parse(json_str, nullptr, false);
             if (!parsed.is_discarded() && parsed.is_array()) {
@@ -239,26 +261,26 @@ nlohmann::json AiService::buildFlashcards(int count) const {
         }
     } catch (...) {}
 
-    // Smart fallback to prevent duplicates
-    // CRITICAL: If flashcards is discarded or not an array, reset it before pushing
     if (flashcards.is_discarded() || !flashcards.is_array()) {
         flashcards = nlohmann::json::array();
     }
 
     if (flashcards.empty() || flashcards.size() < (std::size_t)count) {
         std::vector<std::string> sentences;
-        for (const auto& note : notes) {
+        for (const auto& note : filtered_notes) {
             auto s = splitSentences(note.content);
             for (auto& sent : s) {
-                if (sent.size() > 25) sentences.push_back(sent);
+                if (sent.size() > 30) sentences.push_back(sent);
             }
         }
 
-        // If we still need more cards, fill with sentence-based ones
         while (flashcards.size() < (std::size_t)count && !sentences.empty()) {
             std::size_t idx = flashcards.size() % sentences.size();
-            // Ensure unique front
-            std::string front = "Concept " + std::to_string(flashcards.size() + 1) + ": " + sentences[idx].substr(0, std::min<size_t>(sentences[idx].size(), 45)) + "...";
+            std::string front = "Explain this concept from your notes: " + filtered_notes[0].title;
+            if (sentences[idx].size() > 60) {
+                 front = "What does this note mention about " + filtered_notes[0].title + "?";
+            }
+            
             flashcards.push_back({
                 {"front", front},
                 {"back", sentences[idx]}
