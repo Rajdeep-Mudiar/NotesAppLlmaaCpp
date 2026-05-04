@@ -37,6 +37,11 @@ if (Test-Path "$root\.venv\Scripts\python.exe") {
 
 Write-Host "Starting AI Second Brain development stack..." -ForegroundColor Cyan
 
+# 0. Clean up any existing processes to ensure new settings (like context size) apply
+Write-Host "Cleaning up old processes..." -ForegroundColor Gray
+Stop-Process -Name "second_brain_server" -ErrorAction SilentlyContinue
+Stop-Process -Name "llama-server" -ErrorAction SilentlyContinue
+
 # 1. Environment & Dependency Checks
 Write-Host "Checking environment..." -ForegroundColor Gray
 
@@ -111,7 +116,7 @@ Write-Host ""
 Write-Host "Starting llama-server on port 8081..." -ForegroundColor Yellow
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-$llamaArgs = "-m `"$modelPath`" --host 127.0.0.1 --port 8081 -c 4096 -ngl 0 -np 1"
+$llamaArgs = "-m `"$modelPath`" --host 127.0.0.1 --port 8081 -c 8192 -ngl 0 -np 1"
 
 Start-Process -FilePath $llamaServerBinary -ArgumentList $llamaArgs -WorkingDirectory $llamaDir -WindowStyle Normal
 

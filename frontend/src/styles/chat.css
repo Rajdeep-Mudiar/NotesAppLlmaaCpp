@@ -31,6 +31,51 @@
   align-self: flex-start;
 }
 
+.message-row {
+  display: flex;
+  margin-bottom: 1.25rem;
+  width: 100%;
+}
+
+.message-row.user {
+  justify-content: flex-end;
+}
+
+.avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  flex-shrink: 0;
+  margin-top: auto;
+}
+
+.user-avatar {
+  background: var(--fb-blue);
+  color: white;
+  margin-left: 0.75rem;
+}
+
+.assistant-avatar {
+  background: var(--fb-gray-bg);
+  color: var(--fb-text);
+  margin-right: 0.75rem;
+  border: 1px solid var(--fb-border);
+}
+
+.message {
+  max-width: 75%;
+  padding: 0.75rem 1rem;
+  border-radius: 1.25rem;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  position: relative;
+}
+
 .message-text {
   padding: 10px 16px;
   border-radius: 18px;

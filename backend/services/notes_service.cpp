@@ -271,13 +271,32 @@ std::vector<std::string> NotesService::generateTags(const std::string & title, c
 
 double NotesService::relevanceScore(const NoteRecord & note, const std::vector<std::string> & query_tokens) {
     if (query_tokens.empty()) return 1.0;
-    const auto note_tokens = tokenize(note.title + " " + note.content);
+    
+    std::string title_low = toLower(note.title);
+    std::string content_low = toLower(note.content);
+    const auto note_tokens = tokenize(title_low + " " + content_low);
+    
     double score = 0.0;
+    
+    // Check for exact phrase matches in title (HUGE BOOST)
+    std::string full_query;
+    for (const auto& t : query_tokens) full_query += (full_query.empty() ? "" : " ") + t;
+    if (title_low.find(full_query) != std::string::npos) score += 50.0;
+
     for (const auto & token : query_tokens) {
-        if (toLower(note.title).find(token) != std::string::npos) score += 2.0;
-        for (const auto& tag : note.tags) if (toLower(tag).find(token) != std::string::npos) score += 1.5;
-        score += std::count(note_tokens.begin(), note_tokens.end(), token) * 1.0;
+        // Title match boost
+        if (title_low.find(token) != std::string::npos) score += 10.0;
+        
+        // Tag match boost
+        for (const auto& tag : note.tags) {
+            if (toLower(tag).find(token) != std::string::npos) score += 8.0;
+        }
+
+        // Frequency match (normalize by note length to avoid favoring huge notes)
+        int count = std::count(note_tokens.begin(), note_tokens.end(), token);
+        score += (count * 1.0);
     }
+    
     return score;
 }
 

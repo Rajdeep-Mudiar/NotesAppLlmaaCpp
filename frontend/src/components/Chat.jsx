@@ -51,22 +51,27 @@ export default function Chat({ messages, onSend, busy }) {
         )}
         
         {messages.map((msg, i) => (
-          <div key={i} className={`message ${msg.role}`}>
-            <div className="message-header" style={{fontSize: '0.7rem', opacity: 0.6, marginBottom: '0.25rem', display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start'}}>
-              {msg.role === 'user' ? 'You' : 'Assistant'}
+          <div key={i} className={`message-row ${msg.role}`}>
+            {msg.role === 'assistant' && (
+              <div className="avatar assistant-avatar">AI</div>
+            )}
+            <div className={`message ${msg.role}`}>
+              <div className="message-text">
+                {msg.text}
+              </div>
             </div>
-            <div className="message-text">
-              {msg.text}
-            </div>
+            {msg.role === 'user' && (
+              <div className="avatar user-avatar">U</div>
+            )}
           </div>
         ))}
 
         {busy && (
-          <div className="message assistant">
-            <div className="message-header" style={{fontSize: '0.7rem', opacity: 0.6, marginBottom: '0.25rem'}}>
-              Assistant
+          <div className="message-row assistant">
+            <div className="avatar assistant-avatar">AI</div>
+            <div className="message assistant">
+              <div className="loading-dots">Consulting brain & notes...</div>
             </div>
-            <div className="loading-dots">Consulting your knowledge base</div>
           </div>
         )}
       </div>

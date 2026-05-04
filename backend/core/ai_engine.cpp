@@ -164,7 +164,8 @@ std::string AiEngine::cleanLlamaOutput(const std::string & raw) {
             static const std::vector<std::string> echo_markers = {
                 "### Context (Notes):", "Notes:", "User question:", 
                 "### Question:", "Respond like", "You are an AI",
-                "[Title]", "[Tags]", "[Content]"
+                "[Title]", "[Tags]", "[Content]",
+                "<|im_start|>", "<|im_end|>", "assistant\n"
             };
             
             // We want to find the LAST occurrence of ANY of these and strip everything before it
