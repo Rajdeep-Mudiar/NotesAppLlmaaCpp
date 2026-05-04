@@ -127,14 +127,14 @@ nlohmann::json AiService::buildSearchResponse(const std::string & query, const s
     }
 
     const std::string prompt =
-        "<|im_start|>system\n"
+        "<|system|>\n"
         "You are the 'Second Brain AI'. Answer the user's question using the provided notes.\n"
         "If you use your general knowledge, clarify that it's from your 'brain' and not the notes.\n"
         "Personality: " + modeInstruction(mode, persona) + "\n"
-        "Context (Notes):\n" + context.str() + "<|im_end|>\n"
-        "<|im_start|>user\n"
-        "Question: " + query + "<|im_end|>\n"
-        "<|im_start|>assistant\n"
+        "Context (Notes):\n" + context.str() + "</s>\n"
+        "<|user|>\n"
+        "Question: " + query + "</s>\n"
+        "<|assistant|>\n"
         "@@@ANSWER_START@@@\n";
 
     std::string answer = ai_engine_.generate(prompt, 600);
@@ -203,43 +203,50 @@ nlohmann::json AiService::buildFlashcards(int count) const {
         return {{"flashcards", nlohmann::json::array()}};
     }
 
-    // Use most recent 5 notes
-    if (notes.size() > 5) notes.resize(5);
+    // Allow up to 10 notes for context to avoid overloading small LLMs
+    if (notes.size() > 10) notes.resize(10);
 
     std::ostringstream context;
     for (const auto & note : notes) {
-        context << "Title: " << note.title << "\nContent: " << note.content << "\n---\n";
+        context << "[Note: " << note.title << "]\n" << note.content << "\n---\n";
     }
 
     const std::string prompt =
-        "<|im_start|>system\n"
-        "You are a study assistant. Generate exactly " + std::to_string(count) + " flashcards based on the notes below.\n"
-        "Format: Return ONLY a valid JSON array of objects with 'front' and 'back' fields.\n"
-        "Example: [{\"front\": \"Question?\", \"back\": \"Answer.\"}]\n"
-        "Notes:\n" + context.str() + "<|im_end|>\n"
-        "<|im_start|>assistant\n"
+        "<|system|>\n"
+        "You are a study assistant. Generate exactly " + std::to_string(count) + " flashcards based on the notes provided.\n"
+        "Each flashcard must have a 'front' (question/concept) and a 'back' (answer/explanation).\n"
+        "Return ONLY a valid JSON array. Do not include any other text.\n"
+        "Example format: [{\"front\": \"...\", \"back\": \"...\"}]\n"
+        "Notes:\n" + context.str() + "</s>\n"
+        "<|user|>\n"
+        "Create " + std::to_string(count) + " flashcards.</s>\n"
+        "<|assistant|>\n"
         "@@@JSON_START@@@\n";
 
     std::string response = ai_engine_.generate(prompt, 1024);
     nlohmann::json flashcards = nlohmann::json::array();
     
     try {
+        // More robust JSON extraction
         auto start = response.find('[');
         auto end = response.rfind(']');
         if (start != std::string::npos && end != std::string::npos && end > start) {
             std::string json_str = response.substr(start, end - start + 1);
-            flashcards = nlohmann::json::parse(json_str);
+            flashcards = nlohmann::json::parse(json_str, nullptr, false);
         }
     } catch (...) {
-        std::cerr << "[ERROR] Flashcard JSON parse failed." << std::endl;
+        std::cerr << "[ERROR] Flashcard AI JSON parse failed." << std::endl;
     }
 
-    if (flashcards.empty() || !flashcards.is_array()) {
+    // Fallback logic if AI fails or returns empty
+    if (flashcards.empty() || !flashcards.is_array() || flashcards.size() == 0) {
         flashcards = nlohmann::json::array();
-        for (std::size_t i = 0; i < std::min<std::size_t>(notes.size(), (std::size_t)count); ++i) {
+        // If we have very few notes, try to split them into parts to reach the count
+        for (int i = 0; i < count; ++i) {
+            const auto& note = notes[i % notes.size()];
             flashcards.push_back({
-                {"front", "Key concept in " + notes[i].title},
-                {"back", summarize(notes[i].content)}
+                {"front", (i >= (int)notes.size() ? "Concept from " : "Key concept: ") + note.title},
+                {"back", summarize(note.content)}
             });
         }
     }

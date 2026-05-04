@@ -116,7 +116,7 @@ Write-Host ""
 Write-Host "Starting llama-server on port 8081..." -ForegroundColor Yellow
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-$llamaArgs = "-m `"$modelPath`" --host 127.0.0.1 --port 8081 -c 8192 -ngl 0 -np 1"
+$llamaArgs = "-m `"$modelPath`" --host 127.0.0.1 --port 8081 -c 2048 -ngl 0 -np 1"
 
 Start-Process -FilePath $llamaServerBinary -ArgumentList $llamaArgs -WorkingDirectory $llamaDir -WindowStyle Normal
 
@@ -153,6 +153,7 @@ $env:SECOND_BRAIN_LLAMA_BINARY = $llamaCliBinary
 $env:SECOND_BRAIN_MODEL_PATH = $modelPath
 $env:SECOND_BRAIN_LLAMA_SERVER_PORT = "8081"
 $env:SECOND_BRAIN_PYTHON = $PYTHON_CMD
+$env:PYTHONIOENCODING = "utf-8"
 
 Start-Process -FilePath $backendExe -WorkingDirectory $backendDir -WindowStyle Normal
 

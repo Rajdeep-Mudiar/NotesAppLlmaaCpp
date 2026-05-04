@@ -46,6 +46,12 @@ def delete_note(note_id):
     return True
 
 if __name__ == "__main__":
+    # Force UTF-8 for all stdout/stderr on Windows
+    if sys.platform == "win32":
+        import io
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+
     if len(sys.argv) < 2:
         sys.exit(1)
 
@@ -53,7 +59,9 @@ if __name__ == "__main__":
     
     try:
         if cmd == "list":
-            print(json.dumps(list_notes()))
+            # Use ensure_ascii=True to avoid 'charmap' errors on Windows pipes
+            # nlohmann::json in C++ will correctly parse the \uXXXX sequences.
+            print(json.dumps(list_notes(), ensure_ascii=True))
         elif cmd == "save_file":
             with open(sys.argv[2], 'r', encoding='utf-8') as f:
                 data = json.load(f)

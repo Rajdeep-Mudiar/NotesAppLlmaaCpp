@@ -88,30 +88,36 @@ const Notes = ({ notes, onSave, onDelete }) => {
       <div className="notes-list">
         {filteredNotes.map(note => (
           <div key={note.id} className="note-card" onClick={() => handleEdit(note)}>
-            <div style={{display: 'flex', gap: '12px', alignItems: 'flex-start', marginBottom: '12px'}}>
-              <div className="logo-icon" style={{background: 'var(--accent-soft)', color: 'var(--accent)', minWidth: '40px'}}>
+            <div style={{display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '10px'}}>
+              <div className="logo-icon" style={{background: 'var(--accent-soft)', color: 'var(--accent)', minWidth: '32px', height: '32px', fontSize: '0.8rem'}}>
                 {getInitials(note.title)}
               </div>
-              <div>
-                <h3 style={{margin: 0}}>{note.title || "Untitled Note"}</h3>
-                <span style={{fontSize: '0.8rem', color: 'var(--text-muted)'}}>{note.updated_at || "Just now"}</span>
-              </div>
-              {note.id && (
-                <button 
-                    onClick={(e) => { e.stopPropagation(); onDelete(note.id); }}
-                    style={{marginLeft: 'auto', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem'}}
-                    title="Delete"
-                >
-                    ×
-                </button>
-              )}
+              <h3 style={{margin: 0, fontSize: '0.95rem'}} title={note.title}>{note.title || "Untitled"}</h3>
             </div>
+            
             <p>{note.content}</p>
+            
             <div className="note-tags">
-              {note.tags && note.tags.slice(0, 5).map(tag => (
-                <span key={tag} className="tag">{tag}</span>
+              {note.tags && note.tags.slice(0, 2).map(tag => (
+                <span key={tag} className="tag" style={{padding: '2px 8px', fontSize: '0.7rem'}}>{tag}</span>
               ))}
-              {note.tags && note.tags.length > 5 && <span className="tag">+{note.tags.length - 5} more</span>}
+            </div>
+
+            <div className="card-actions">
+              <button 
+                className="action-btn"
+                onClick={(e) => { e.stopPropagation(); handleEdit(note); }}
+                title="Edit Thought"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4L18.5 2.5z"></path></svg>
+              </button>
+              <button 
+                className="action-btn delete"
+                onClick={(e) => { e.stopPropagation(); onDelete(note.id); }}
+                title="Delete Thought"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+              </button>
             </div>
           </div>
         ))}

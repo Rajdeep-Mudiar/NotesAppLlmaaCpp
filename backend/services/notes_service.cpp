@@ -151,22 +151,39 @@ std::vector<NoteRecord> NotesService::loadNotes() const {
 
     std::string bridge_path = (fs::path(executable_dir_) / "storage_bridge.py").string();
     std::string cmd = "\"" + python_cmd + "\" \"" + bridge_path + "\" list";
-    std::cout << "[DEBUG] Loading notes via: " << cmd << std::endl;
     std::string out = execCommand(cmd);
+    
     try {
         size_t first = out.find('[');
         size_t last = out.find_last_of(']');
+        
         if (first == std::string::npos || last == std::string::npos) {
+            if (out.find("error") != std::string::npos) {
+                std::cerr << "[ERROR] MongoDB Bridge Error: " << out << std::endl;
+            }
             return {};
         }
+
         std::string json_part = out.substr(first, last - first + 1);
-        auto j = nlohmann::json::parse(json_part);
+        
+        // Use ignore/replace for invalid UTF-8 bytes to prevent crashes
+        auto j = nlohmann::json::parse(json_part, nullptr, false);
+        if (j.is_discarded()) {
+            std::cerr << "[ERROR] JSON Parse Discarded. Raw: " << out.substr(0, 100) << "..." << std::endl;
+            return {};
+        }
+
         std::vector<NoteRecord> notes;
         for (const auto& item : j) {
-            notes.push_back(item.get<NoteRecord>());
+            try {
+                notes.push_back(item.get<NoteRecord>());
+            } catch (const std::exception& e) {
+                std::cerr << "[ERROR] Failed to parse individual note: " << e.what() << std::endl;
+            }
         }
         return notes;
-    } catch (...) {
+    } catch (const std::exception& e) {
+        std::cerr << "[ERROR] loadNotes failed: " << e.what() << std::endl;
         return {};
     }
 }
@@ -328,6 +345,6 @@ void from_json(const nlohmann::json & j, NoteRecord & n) {
     n.title = j.value("title", "");
     n.content = j.value("content", "");
     n.tags = j.value("tags", std::vector<std::string>{});
-    n.created_at = j.value("created", "");
-    n.updated_at = j.value("updated", "");
+    n.created_at = j.value("created_at", "");
+    n.updated_at = j.value("updated_at", "");
 }
