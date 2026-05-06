@@ -577,22 +577,36 @@ nlohmann::json AiService::buildRoadmap(const std::vector<std::string> & noteIds)
 
     const std::string prompt =
         "<|system|>\n"
-        "You are a Senior Learning Architect. Create a logical, step-by-step learning ROADMAP based on the provided NOTES.\n"
-        "REQUIREMENTS:\n"
-        "1. Break down the content into a series of progressive steps.\n"
-        "2. Each step should have a 'title', a 'description', and an 'estimated_time'.\n"
-        "3. Ensure the steps follow a logical order of complexity (basics to advanced).\n"
-        "4. Respond ONLY with a JSON array of objects.\n"
-        "EXAMPLE FORMAT:\n"
-        "[{\"title\": \"Step 1: Introduction\", \"description\": \"Understand the core concepts of...\", \"estimated_time\": \"30 mins\"}]\n"
-        "NOTES:\n" + context.str() + "</s>\n"
+        "You are a Senior Curriculum Designer and Subject Matter Expert. Create a HIGHLY DETAILED, MODULE-BASED learning ROADMAP based on the provided NOTES.\n"
+        "STRICT REQUIREMENTS:\n"
+        "1. MODULE STRUCTURE: Group concepts into logical 'Modules'. Each module should have 2-3 specific sub-steps.\n"
+        "2. PROGRESSION: Order the modules from fundamental theory to advanced implementation.\n"
+        "3. DEPTH: Do NOT just list the note titles. Extract specific concepts, algorithms, or theories mentioned inside the notes.\n"
+        "4. OUTPUT FORMAT: Respond ONLY with a JSON array of objects.\n"
+        "JSON SCHEMA:\n"
+        "[\n"
+        "  {\n"
+        "    \"title\": \"Module 1: [Module Name]\",\n"
+        "    \"description\": \"Detailed explanation of what will be learned, mentioning specific concepts like [Concept A] and [Concept B].\",\n"
+        "    \"estimated_time\": \"2 hours\"\n"
+        "  },\n"
+        "  {\n"
+        "    \"title\": \"Module 2: [Advanced Topic]\",\n"
+        "    \"description\": \"How to apply [Concept] to solve [Problem].\",\n"
+        "    \"estimated_time\": \"3 hours\"\n"
+        "  }\n"
+        "]\n"
+        "NOTES FOR CONTEXT:\n" + context.str() + "</s>\n"
         "<|user|>\n"
-        "Generate a detailed roadmap now based on these notes.</s>\n"
+        "Create a comprehensive, professional roadmap divided into clear modules based on these notes.</s>\n"
         "<|assistant|>\n"
         "[";
 
-    std::string response = ai_engine_.generate(prompt, 2048);
-    if (response.find('[') != 0) response = "[" + response;
+    std::string response = ai_engine_.generate(prompt, 3072);
+    if (response.find('[') != 0 && response.find('{') != std::string::npos) {
+        auto first_bracket = response.find('[');
+        if (first_bracket != std::string::npos) response = response.substr(first_bracket);
+    }
 
     nlohmann::json roadmap = nlohmann::json::array();
     try {
@@ -607,15 +621,26 @@ nlohmann::json AiService::buildRoadmap(const std::vector<std::string> & noteIds)
         }
     } catch (...) {}
 
+    // Smart Fallback if AI fails: Break notes into modules
     if (roadmap.empty()) {
         for (size_t i = 0; i < filtered_notes.size(); ++i) {
-            nlohmann::json step;
-            step["title"] = "Master: " + filtered_notes[i].title;
-            step["description"] = "Deep dive into the core concepts covered in your note about " + filtered_notes[i].title + ".";
-            step["estimated_time"] = "45 mins";
-            roadmap.push_back(step);
+            const auto& note = filtered_notes[i];
+            
+            // Module 1: Fundamentals
+            nlohmann::json m1;
+            m1["title"] = "Module " + std::to_string(i*2 + 1) + ": Fundamentals of " + note.title;
+            m1["description"] = "Establish a strong base by understanding the core principles and definitions of " + note.title + " as outlined in your study materials.";
+            m1["estimated_time"] = "1.5 hours";
+            roadmap.push_back(m1);
+
+            // Module 2: Applied Concepts
+            nlohmann::json m2;
+            m2["title"] = "Module " + std::to_string(i*2 + 2) + ": Advanced Application of " + note.title;
+            m2["description"] = "Deep dive into the complex interactions and practical applications of " + note.title + ". Focus on synthesizing information with other related concepts.";
+            m2["estimated_time"] = "2.5 hours";
+            roadmap.push_back(m2);
         }
     }
 
     return {{"roadmap", roadmap}};
-}
+}
