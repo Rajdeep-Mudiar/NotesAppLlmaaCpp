@@ -544,3 +544,78 @@ nlohmann::json AiService::buildIdeas() const {
     }
     return {{"ideas", ideas}};
 }
+
+nlohmann::json AiService::buildRoadmap(const std::vector<std::string> & noteIds) const {
+    auto all_notes = notes_service_.loadNotes();
+    std::vector<NoteRecord> filtered_notes;
+
+    if (noteIds.empty()) {
+        filtered_notes = all_notes;
+    } else {
+        for (const auto & id : noteIds) {
+            for (const auto & note : all_notes) {
+                if (note.id == id) {
+                    filtered_notes.push_back(note);
+                    break;
+                }
+            }
+        }
+    }
+
+    if (filtered_notes.empty()) {
+        return {{"roadmap", nlohmann::json::array()}};
+    }
+
+    std::ostringstream context;
+    int char_count = 0;
+    for (const auto & note : filtered_notes) {
+        std::string entry = "NOTE: " + note.title + "\nCONTENT: " + note.content + "\n---\n";
+        if (char_count + entry.size() > 4000) break;
+        context << entry;
+        char_count += (int)entry.size();
+    }
+
+    const std::string prompt =
+        "<|system|>\n"
+        "You are a Senior Learning Architect. Create a logical, step-by-step learning ROADMAP based on the provided NOTES.\n"
+        "REQUIREMENTS:\n"
+        "1. Break down the content into a series of progressive steps.\n"
+        "2. Each step should have a 'title', a 'description', and an 'estimated_time'.\n"
+        "3. Ensure the steps follow a logical order of complexity (basics to advanced).\n"
+        "4. Respond ONLY with a JSON array of objects.\n"
+        "EXAMPLE FORMAT:\n"
+        "[{\"title\": \"Step 1: Introduction\", \"description\": \"Understand the core concepts of...\", \"estimated_time\": \"30 mins\"}]\n"
+        "NOTES:\n" + context.str() + "</s>\n"
+        "<|user|>\n"
+        "Generate a detailed roadmap now based on these notes.</s>\n"
+        "<|assistant|>\n"
+        "[";
+
+    std::string response = ai_engine_.generate(prompt, 2048);
+    if (response.find('[') != 0) response = "[" + response;
+
+    nlohmann::json roadmap = nlohmann::json::array();
+    try {
+        auto start = response.find('[');
+        auto end = response.rfind(']');
+        if (start != std::string::npos && end != std::string::npos && end >= start) {
+            std::string json_str = response.substr(start, end - start + 1);
+            auto parsed = nlohmann::json::parse(json_str, nullptr, false);
+            if (!parsed.is_discarded() && parsed.is_array()) {
+                roadmap = parsed;
+            }
+        }
+    } catch (...) {}
+
+    if (roadmap.empty()) {
+        for (size_t i = 0; i < filtered_notes.size(); ++i) {
+            nlohmann::json step;
+            step["title"] = "Master: " + filtered_notes[i].title;
+            step["description"] = "Deep dive into the core concepts covered in your note about " + filtered_notes[i].title + ".";
+            step["estimated_time"] = "45 mins";
+            roadmap.push_back(step);
+        }
+    }
+
+    return {{"roadmap", roadmap}};
+}

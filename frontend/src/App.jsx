@@ -7,6 +7,7 @@ import Notes from "./components/Notes.jsx";
 import Flashcards from "./components/Flashcards.jsx";
 import Quiz from "./components/Quiz.jsx";
 import Graph from "./components/Graph.jsx";
+import Roadmap from "./components/Roadmap.jsx";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8080";
 
@@ -16,6 +17,7 @@ const views = [
   { id: "flashcards", label: "Flashcards" },
   { id: "quiz", label: "Quiz Arena" },
   { id: "graph", label: "Knowledge Graph" },
+  { id: "roadmap", label: "Roadmap" },
 ];
 
 async function request(path, payload) {
@@ -48,6 +50,7 @@ export default function App() {
   const [graph, setGraph] = useState({ nodes: [], edges: [] });
   const [contradictions, setContradictions] = useState([]);
   const [learningPath, setLearningPath] = useState([]);
+  const [roadmapData, setRoadmapData] = useState([]);
   const [selfQuestions, setSelfQuestions] = useState([]);
   const [ideas, setIdeas] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -91,6 +94,19 @@ export default function App() {
       await refreshAll();
     } catch (e) {
       setError("Delete failed: " + e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleGenerateRoadmap(noteIds) {
+    setBusy(true);
+    setError("");
+    try {
+      const data = await request("/roadmap", { noteIds });
+      setRoadmapData(data.roadmap || []);
+    } catch (e) {
+      setError("Roadmap failed: " + e.message);
     } finally {
       setBusy(false);
     }
@@ -222,6 +238,15 @@ export default function App() {
 
           {activeView === "graph" ? (
             <Graph graph={graph} contradictions={contradictions} />
+          ) : null}
+
+          {activeView === "roadmap" ? (
+            <Roadmap 
+              roadmap={roadmapData} 
+              notes={notes} 
+              onGenerateRoadmap={handleGenerateRoadmap}
+              busy={busy}
+            />
           ) : null}
         </div>
       </main>

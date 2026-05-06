@@ -8,6 +8,7 @@ export default function Sidebar({ views, activeView, onSwitch }) {
       case "flashcards": return "🗂️";
       case "quiz": return "🎯";
       case "graph": return "🕸️";
+      case "roadmap": return "🗺️";
       case "learning": return "🎓";
       default: return "📄";
     }

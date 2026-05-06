@@ -82,7 +82,9 @@ cd llama.cpp
 cmake -S . -B build
 cmake --build build --config Debug -j # Or Release
 ```
-
+ then activate the venv from root directory
+ .\.venv\Scripts\Activate.ps1
+ 
 ### 3. Quick Start (Windows)
 The easiest way to start the entire stack is using the provided PowerShell script:
 ```powershell

@@ -20,6 +20,7 @@ public:
     nlohmann::json buildQuiz(int count = 5, const std::string & difficulty = "medium", const std::vector<std::string> & noteIds = {}) const;
     nlohmann::json buildSelfQuestions() const;
     nlohmann::json buildIdeas() const;
+    nlohmann::json buildRoadmap(const std::vector<std::string> & noteIds) const;
 
 private:
     NotesService & notes_service_;
