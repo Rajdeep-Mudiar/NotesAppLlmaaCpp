@@ -7,10 +7,26 @@
 #include <sstream>
 #include <unordered_map>
 
+using json = nlohmann::json;
+
 namespace {
 bool containsNegation(const std::string & text) {
     const auto lower = text;
     return lower.find(" not ") != std::string::npos || lower.find(" never ") != std::string::npos || lower.find(" no ") != std::string::npos || lower.find("without") != std::string::npos;
+}
+std::vector<std::string> tokenize(const std::string & text) {
+    std::vector<std::string> tokens;
+    std::string current;
+    for (char ch : text) {
+        if (std::isalnum(static_cast<unsigned char>(ch))) {
+            current.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
+        } else if (!current.empty()) {
+            tokens.push_back(current);
+            current.clear();
+        }
+    }
+    if (!current.empty()) tokens.push_back(current);
+    return tokens;
 }
 } // namespace
 
@@ -221,8 +237,8 @@ nlohmann::json AiService::buildFlashcards(int count, const std::string & difficu
     std::ostringstream context;
     int char_count = 0;
     for (const auto & note : filtered_notes) {
-        std::string entry = "ID: " + note.id + "\nTITLE: " + note.title + "\nCONTENT: " + note.content + "\n---\n";
-        if (char_count + entry.size() > 1400) break; 
+        std::string entry = "SOURCE_NOTE: " + note.title + "\nTEXT_CONTENT: " + note.content + "\n---\n";
+        if (char_count + entry.size() > 3000) break; 
         context << entry;
         char_count += (int)entry.size();
     }
@@ -292,6 +308,114 @@ nlohmann::json AiService::buildFlashcards(int count, const std::string & difficu
     return {{"flashcards", flashcards}};
 }
 
+nlohmann::json AiService::buildQuiz(int count, const std::string & difficulty, const std::vector<std::string> & noteIds) const {
+    auto all_notes = notes_service_.loadNotes();
+    std::vector<NoteRecord> filtered_notes;
+
+    if (noteIds.empty()) {
+        filtered_notes = all_notes;
+    } else {
+        for (const auto & id : noteIds) {
+            for (const auto & note : all_notes) {
+                if (note.id == id) {
+                    filtered_notes.push_back(note);
+                    break;
+                }
+            }
+        }
+    }
+
+    if (filtered_notes.empty()) {
+        return {{"questions", nlohmann::json::array()}};
+    }
+
+    std::ostringstream context;
+    int char_count = 0;
+    for (const auto & note : filtered_notes) {
+        std::string entry = "SOURCE_NOTE: " + note.title + "\nTEXT_CONTENT: " + note.content + "\n---\n";
+        if (char_count + entry.size() > 3000) break;
+        context << entry;
+        char_count += (int)entry.size();
+    }
+
+    const std::string prompt =
+        "<|system|>\n"
+        "You are a Professional Quiz Creator. Generate EXACTLY " + std::to_string(count) + " unique Multiple Choice Questions from the SOURCE_NOTES.\n"
+        "STRICT DIVERSITY RULES:\n"
+        "1. NO REPETITION: Every question must cover a different aspect or topic.\n"
+        "2. UNIQUE OPTIONS: Do NOT use the same distractors for multiple questions.\n"
+        "3. GROUNDING: Strictly use the provided notes.\n"
+        "SOURCE_NOTES:\n" + context.str() + "\n"
+        "JSON FORMAT:</s>\n"
+        "<|user|>\n"
+        "Generate EXACTLY " + std::to_string(count) + " different MCQs now.</s>\n"
+        "<|assistant|>\n"
+        "[";
+
+    std::string response = ai_engine_.generate(prompt, 2048);
+    
+    nlohmann::json questions = nlohmann::json::array();
+    try {
+        auto start = response.find('[');
+        auto end = response.rfind(']');
+        if (start != std::string::npos && end != std::string::npos && end > start) {
+            std::string json_str = response.substr(start, end - start + 1);
+            auto parsed = nlohmann::json::parse(json_str, nullptr, false);
+            if (!parsed.is_discarded() && parsed.is_array()) {
+                questions = parsed;
+            }
+        }
+    } catch (...) {}
+
+    // DYNAMIC FALLBACK: Diverse questions and rotating options
+    if (questions.empty() || (int)questions.size() < count) {
+        std::vector<std::string> distractor_pool = {
+            "A systematic methodology for architectural design.",
+            "The primary protocol for high-level data integration.",
+            "A theoretical framework for optimized performance.",
+            "The core strategy for resource allocation.",
+            "A comparative analysis of implementation models.",
+            "The foundational principle of systemic scaling.",
+            "A comprehensive overview of functional requirements.",
+            "The standardized approach to modular development."
+        };
+
+        for (int i = (int)questions.size(); i < count; ++i) {
+            const auto & note = filtered_notes[i % filtered_notes.size()];
+            nlohmann::json q = nlohmann::json::object();
+            
+            std::string topic = !note.tags.empty() ? note.tags[i % note.tags.size()] : note.title;
+            
+            // Vary the question style
+            if (i % 2 == 0) {
+                q["question"] = "Which of the following is the defining characteristic of '" + topic + "' according to the notes?";
+            } else {
+                q["question"] = "Based on the material in '" + note.title + "', what role does " + topic + " play in the overall system?";
+            }
+            
+            nlohmann::json opts = nlohmann::json::array();
+            opts.push_back("The optimized execution of " + topic + " based on note criteria."); // Correct
+            
+            // Pick 3 unique distractors from the pool based on index
+            std::set<int> picked_indices;
+            while (picked_indices.size() < 3) {
+                int idx = (i * 3 + (int)picked_indices.size()) % distractor_pool.size();
+                picked_indices.insert(idx);
+            }
+            
+            for (int idx : picked_indices) {
+                opts.push_back(distractor_pool[idx]);
+            }
+            
+            q["options"] = opts;
+            q["answer"] = opts[0];
+            questions.push_back(q);
+        }
+    }
+
+    return {{"questions", questions}};
+}
+
 nlohmann::json AiService::buildGraph() const {
     const auto notes = notes_service_.loadNotes();
     nlohmann::json nodes = nlohmann::json::array();
@@ -299,15 +423,28 @@ nlohmann::json AiService::buildGraph() const {
     std::unordered_map<std::string, bool> concept_ids;
 
     for (const auto & note : notes) {
-        nodes.push_back(nlohmann::json{{"id", note.id}, {"label", note.title}, {"type", "note"}, {"tags", note.tags}});
+        json n = json::object();
+        n["id"] = note.id;
+        n["label"] = note.title;
+        n["type"] = "note";
+        n["tags"] = note.tags;
+        nodes.push_back(n);
         const auto concepts = extractConcepts(note);
         for (const auto & concept_label : concepts) {
             const std::string concept_id = "concept:" + concept_label;
             if (!concept_ids.contains(concept_id)) {
                 concept_ids[concept_id] = true;
-                nodes.push_back(nlohmann::json{{"id", concept_id}, {"label", concept_label}, {"type", "concept"}});
+                json c = json::object();
+                c["id"] = concept_id;
+                c["label"] = concept_label;
+                c["type"] = "concept";
+                nodes.push_back(c);
             }
-            edges.push_back(nlohmann::json{{"source", note.id}, {"target", concept_id}, {"kind", "mentions"}});
+            json e = json::object();
+            e["source"] = note.id;
+            e["target"] = concept_id;
+            e["kind"] = "mentions";
+            edges.push_back(e);
         }
     }
 
@@ -320,7 +457,12 @@ nlohmann::json AiService::buildGraph() const {
                 }
             }
             if (!shared.empty()) {
-                edges.push_back(nlohmann::json{{"source", notes[i].id}, {"target", notes[j].id}, {"kind", "shared-tag"}, {"labels", shared}});
+                json e = json::object();
+                e["source"] = notes[i].id;
+                e["target"] = notes[j].id;
+                e["kind"] = "shared-tag";
+                e["labels"] = shared;
+                edges.push_back(e);
             }
         }
     }
@@ -347,13 +489,13 @@ nlohmann::json AiService::buildContradictions() const {
             const bool left_neg = containsNegation(notes[i].content);
             const bool right_neg = containsNegation(notes[j].content);
             if (left_neg != right_neg) {
-                contradictions.push_back({
-                    {"left", notes[i].title},
-                    {"right", notes[j].title},
-                    {"shared_tags", shared},
-                    {"severity", "medium"},
-                    {"summary", "These notes present opposite polarity on a shared concept."}
-                });
+                nlohmann::json c = nlohmann::json::object();
+                c["left"] = notes[i].title;
+                c["right"] = notes[j].title;
+                c["shared_tags"] = shared;
+                c["severity"] = "medium";
+                c["summary"] = "These notes present opposite polarity on a shared concept.";
+                contradictions.push_back(c);
             }
         }
     }
@@ -365,11 +507,11 @@ nlohmann::json AiService::buildLearningPath() const {
     const auto notes = notes_service_.loadNotes();
     nlohmann::json path = nlohmann::json::array();
     for (const auto & note : notes) {
-        path.push_back({
-            {"step", path.size() + 1},
-            {"title", "Review note: " + note.title},
-            {"reason", "This note connects to " + joinList(note.tags, ", ") + "."}
-        });
+        nlohmann::json s = nlohmann::json::object();
+        s["step"] = (int)(path.size() + 1);
+        s["title"] = "Review note: " + note.title;
+        s["reason"] = "This note connects to " + joinList(note.tags, ", ") + ".";
+        path.push_back(s);
     }
     return {{"learning_path", path}};
 }
@@ -380,9 +522,13 @@ nlohmann::json AiService::buildSelfQuestions() const {
     for (const auto & note : notes) {
         const auto concepts = extractConcepts(note);
         if (!concepts.empty()) {
-            questions.push_back({{"question", "How does " + concepts.front() + " relate to " + note.title + "?"}});
+            nlohmann::json q1 = nlohmann::json::object();
+            q1["question"] = "How does " + concepts.front() + " relate to " + note.title + "?";
+            questions.push_back(q1);
         }
-        questions.push_back({{"question", "What evidence in \"" + note.title + "\" supports its key claim?"}});
+        nlohmann::json q2 = nlohmann::json::object();
+        q2["question"] = "What evidence in \"" + note.title + "\" supports its key claim?";
+        questions.push_back(q2);
     }
     return {{"self_questions", questions}};
 }
@@ -391,10 +537,10 @@ nlohmann::json AiService::buildIdeas() const {
     const auto notes = notes_service_.loadNotes();
     nlohmann::json ideas = nlohmann::json::array();
     for (const auto & note : notes) {
-        ideas.push_back({
-            {"title", "Turn \"" + note.title + "\" into a project"},
-            {"idea", "Combine " + joinList(note.tags, ", ") + " into a concrete experiment or checklist."}
-        });
+        nlohmann::json id = nlohmann::json::object();
+        id["title"] = "Turn \"" + note.title + "\" into a project";
+        id["idea"] = "Combine " + joinList(note.tags, ", ") + " into a concrete experiment or checklist.";
+        ideas.push_back(id);
     }
     return {{"ideas", ideas}};
 }

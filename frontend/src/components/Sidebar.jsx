@@ -6,6 +6,7 @@ export default function Sidebar({ views, activeView, onSwitch }) {
       case "notes": return "📝";
       case "chat": return "💬";
       case "flashcards": return "🗂️";
+      case "quiz": return "🎯";
       case "graph": return "🕸️";
       case "learning": return "🎓";
       default: return "📄";

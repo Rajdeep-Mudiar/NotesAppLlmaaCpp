@@ -309,7 +309,10 @@ json handleRequest(const HttpRequest & request, AppContext & app) {
         }
 
         if (request.path == "/health") {
-            return json{{"status", "ok"}, {"notes_dir", app.notes_service.baseDirectory()}};
+            json res = json::object();
+            res["status"] = "ok";
+            res["notes_dir"] = app.notes_service.baseDirectory();
+            return res;
         }
 
         if (request.method == "GET" && request.path == "/notes") {
@@ -317,7 +320,9 @@ json handleRequest(const HttpRequest & request, AppContext & app) {
             for (const auto & note : app.notes_service.loadNotes()) {
                 notes.push_back(note);
             }
-            return json{{"notes", notes}};
+            json res = json::object();
+            res["notes"] = notes;
+            return res;
         }
 
         if (request.method == "POST" && (request.path == "/add" || request.path == "/save-note")) {
@@ -334,10 +339,14 @@ json handleRequest(const HttpRequest & request, AppContext & app) {
 
             if (id.empty()) {
                 const auto note = app.notes_service.addNote(title, content, tags);
-                return json{{"note", note}};
+                json res = json::object();
+                res["note"] = note;
+                return res;
             } else {
                 const bool updated = app.notes_service.updateNote(id, title, content, tags);
-                return json{{"updated", updated}};
+                json res = json::object();
+                res["updated"] = updated;
+                return res;
             }
         }
 
@@ -345,7 +354,9 @@ json handleRequest(const HttpRequest & request, AppContext & app) {
             const auto body = parseJsonBody(request.body);
             const auto id = body.value("id", "");
             const bool deleted = app.notes_service.deleteNote(id);
-            return json{{"deleted", deleted}};
+            json res = json::object();
+            res["deleted"] = deleted;
+            return res;
         }
 
         if (request.method == "POST" && request.path == "/insights") {
@@ -371,6 +382,17 @@ json handleRequest(const HttpRequest & request, AppContext & app) {
             return app.ai_service.buildFlashcards(count, difficulty, noteIds);
         }
 
+        if (request.method == "POST" && request.path == "/quiz") {
+            const auto body = parseJsonBody(request.body);
+            const int count = body.value("count", 5);
+            const std::string difficulty = body.value("difficulty", "medium");
+            std::vector<std::string> noteIds;
+            if (body.contains("noteIds") && body["noteIds"].is_array()) {
+                noteIds = body["noteIds"].get<std::vector<std::string>>();
+            }
+            return app.ai_service.buildQuiz(count, difficulty, noteIds);
+        }
+
         if (request.method == "POST" && request.path == "/graph") {
             return app.ai_service.buildGraph();
         }
@@ -386,7 +408,9 @@ json handleRequest(const HttpRequest & request, AppContext & app) {
         if (request.method == "POST" && request.path == "/history") {
             const auto body = parseJsonBody(request.body);
             const auto id = body.value("id", "");
-            return json{{"versions", app.notes_service.noteHistory(id)}};
+            json res = json::object();
+            res["versions"] = app.notes_service.noteHistory(id);
+            return res;
         }
 
         if (request.method == "POST" && request.path == "/restore-version") {
@@ -394,7 +418,9 @@ json handleRequest(const HttpRequest & request, AppContext & app) {
             const auto id = body.value("id", "");
             const auto version_file = body.value("version_file", "");
             const bool restored = app.notes_service.restoreVersion(id, version_file);
-            return json{{"restored", restored}};
+            json res = json::object();
+            res["restored"] = restored;
+            return res;
         }
 
         if (request.method == "POST" && request.path == "/questions") {
@@ -405,10 +431,14 @@ json handleRequest(const HttpRequest & request, AppContext & app) {
             return app.ai_service.buildIdeas();
         }
 
-        return json{{"error", "Route not found: " + request.path}};
+        json res = json::object();
+        res["error"] = "Route not found: " + request.path;
+        return res;
     } catch (const std::exception & error) {
         std::cerr << "[ERROR] handleRequest [" << request.method << " " << request.path << "]: " << error.what() << std::endl;
-        return json{{"error", error.what()}};
+        json res = json::object();
+        res["error"] = error.what();
+        return res;
     }
 }
 
@@ -443,18 +473,26 @@ void handleClient(socket_t client_socket, AppContext & app) {
                 return;
             }
 
-            sendAll(client_socket, makeSseData(json{{"type", "start"}, {"query", query}}));
+            json start_msg = json::object();
+            start_msg["type"] = "start";
+            start_msg["query"] = query;
+            sendAll(client_socket, makeSseData(start_msg));
 
             const std::size_t chunk_size = 16;
             for (std::size_t i = 0; i < answer.size(); i += chunk_size) {
                 const std::string chunk = answer.substr(i, chunk_size);
-                if (!sendAll(client_socket, makeSseData(json{{"type", "token"}, {"content", chunk}}))) {
+                json token_msg = json::object();
+                token_msg["type"] = "token";
+                token_msg["content"] = chunk;
+                if (!sendAll(client_socket, makeSseData(token_msg))) {
                     return;
                 }
                 std::this_thread::sleep_for(std::chrono::milliseconds(20));
             }
 
-            sendAll(client_socket, makeSseData(json{{"type", "end"}}));
+            json end_msg = json::object();
+            end_msg["type"] = "end";
+            sendAll(client_socket, makeSseData(end_msg));
             return;
         }
 
@@ -466,12 +504,16 @@ void handleClient(socket_t client_socket, AppContext & app) {
     } catch (const std::exception & e) {
         std::cerr << "[ERROR] handleClient exception: " << e.what() << std::endl;
         try {
-            sendAll(client_socket, makeResponse(500, json{{"error", e.what()}}));
+            json err_msg = json::object();
+            err_msg["error"] = e.what();
+            sendAll(client_socket, makeResponse(500, err_msg));
         } catch (...) {}
     } catch (...) {
         std::cerr << "[ERROR] handleClient: Unknown critical error" << std::endl;
         try {
-            sendAll(client_socket, makeResponse(500, json{{"error", "Unknown internal error"}}));
+            json err_msg = json::object();
+            err_msg["error"] = "Unknown internal error";
+            sendAll(client_socket, makeResponse(500, err_msg));
         } catch (...) {}
     }
 }

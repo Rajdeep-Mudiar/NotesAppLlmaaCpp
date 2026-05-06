@@ -5,6 +5,7 @@ import Sidebar from "./components/Sidebar.jsx";
 import Chat from "./components/Chat.jsx";
 import Notes from "./components/Notes.jsx";
 import Flashcards from "./components/Flashcards.jsx";
+import Quiz from "./components/Quiz.jsx";
 import Graph from "./components/Graph.jsx";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8080";
@@ -13,6 +14,7 @@ const views = [
   { id: "chat", label: "Chat" },
   { id: "notes", label: "Notes" },
   { id: "flashcards", label: "Flashcards" },
+  { id: "quiz", label: "Quiz Arena" },
   { id: "graph", label: "Knowledge Graph" },
 ];
 
@@ -42,6 +44,7 @@ export default function App() {
   const [notes, setNotes] = useState([]);
   const [insights, setInsights] = useState({});
   const [flashcards, setFlashcards] = useState([]);
+  const [quizQuestions, setQuizQuestions] = useState([]);
   const [graph, setGraph] = useState({ nodes: [], edges: [] });
   const [contradictions, setContradictions] = useState([]);
   const [learningPath, setLearningPath] = useState([]);
@@ -190,6 +193,25 @@ export default function App() {
                   setFlashcards(data.flashcards || []);
                 } catch (e) {
                   setError("Failed to generate flashcards: " + e.message);
+                } finally {
+                  setBusy(false);
+                }
+              }}
+              busy={busy}
+            />
+          ) : null}
+
+          {activeView === "quiz" ? (
+            <Quiz
+              quiz={quizQuestions}
+              notes={notes}
+              onGenerateQuiz={async (count, difficulty, noteIds) => {
+                setBusy(true);
+                try {
+                  const data = await request("/quiz", { count, difficulty, noteIds });
+                  setQuizQuestions(data.questions || []);
+                } catch (e) {
+                  setError("Failed to generate quiz: " + e.message);
                 } finally {
                   setBusy(false);
                 }

@@ -96,6 +96,9 @@ if (-not (Test-Path $backendExe)) {
 if ($needsBuild) {
     Write-Host "Building C++ Backend with g++..." -ForegroundColor Yellow
     Push-Location $backendDir
+    # Remove old exe to ensure we don't run stale code on failure
+    if (Test-Path $backendExe) { Remove-Item $backendExe -Force }
+    
     g++ -std=c++20 -I. -I"..\llama.cpp\vendor" `
         server.cpp `
         core\ai_engine.cpp `
@@ -103,9 +106,12 @@ if ($needsBuild) {
         services\ai_service.cpp `
         -lws2_32 `
         -o second_brain_server.exe
+    
+    $buildExit = $LASTEXITCODE
     Pop-Location
-    if (-not (Test-Path $backendExe)) {
-        Write-Host "Build failed! Check g++ output above." -ForegroundColor Red
+
+    if ($buildExit -ne 0 -or -not (Test-Path $backendExe)) {
+        Write-Host "`nBUILD FAILED! Please check the errors above.`n" -ForegroundColor Red
         exit 1
     }
     Write-Host "Build OK." -ForegroundColor Green

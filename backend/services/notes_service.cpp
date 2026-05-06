@@ -330,14 +330,13 @@ std::string NotesService::newId() { return ""; }
 std::string NotesService::baseDirectory() const { return base_directory_; }
 
 void to_json(nlohmann::json & j, const NoteRecord & n) {
-    j = nlohmann::json{
-        {"id", n.id},
-        {"title", n.title},
-        {"content", n.content},
-        {"tags", n.tags},
-        {"created_at", n.created_at},
-        {"updated_at", n.updated_at}
-    };
+    j = nlohmann::json::object();
+    j["id"] = n.id;
+    j["title"] = n.title;
+    j["content"] = n.content;
+    j["tags"] = n.tags;
+    j["created_at"] = n.created_at;
+    j["updated_at"] = n.updated_at;
 }
 
 void from_json(const nlohmann::json & j, NoteRecord & n) {

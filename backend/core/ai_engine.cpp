@@ -264,7 +264,12 @@ std::string AiEngine::generateViaServer(const std::string & prompt, int max_toke
     req["temperature"]   = 0.5;
     req["repeat_penalty"]= 1.1;
     req["stream"]        = false;
-    req["stop"]          = nlohmann::json::array({"</s>", "<|im_end|>", "<|end|>", "###"});
+    nlohmann::json stop_tokens = nlohmann::json::array();
+    stop_tokens.push_back("</s>");
+    stop_tokens.push_back("<|im_end|>");
+    stop_tokens.push_back("<|end|>");
+    stop_tokens.push_back("###");
+    req["stop"] = stop_tokens;
     const std::string body = req.dump();
 
     // Open TCP connection to llama-server

@@ -17,6 +17,7 @@ public:
     nlohmann::json buildGraph() const;
     nlohmann::json buildContradictions() const;
     nlohmann::json buildLearningPath() const;
+    nlohmann::json buildQuiz(int count = 5, const std::string & difficulty = "medium", const std::vector<std::string> & noteIds = {}) const;
     nlohmann::json buildSelfQuestions() const;
     nlohmann::json buildIdeas() const;
 
