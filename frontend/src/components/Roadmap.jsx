@@ -103,29 +103,56 @@ export default function Roadmap({ roadmap, notes, onGenerateRoadmap, busy }) {
                 onClick={() => toggleModule(modIdx)}
               >
                 <div className="step-header">
-                  <h4 className="step-title">{module.title}</h4>
+                  <div>
+                    <h4 className="step-title">{module.module_title}</h4>
+                    <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: '600', marginTop: '4px' }}>
+                        Total Time: {module.total_estimated_time}
+                    </div>
+                  </div>
                   <span className={`expand-icon ${expandedModules.includes(modIdx) ? 'open' : ''}`}>▼</span>
                 </div>
                 <p className="step-desc">{module.description}</p>
                 
-                {expandedModules.includes(modIdx) && module.sub_modules && (
-                  <div className="sub-modules-list" onClick={(e) => e.stopPropagation()}>
-                    {module.sub_modules.map((sub, subIdx) => {
-                        const isSubExpanded = expandedSubModules.includes(`${modIdx}-${subIdx}`);
+                {expandedModules.includes(modIdx) && module.sections && (
+                  <div className="sections-list" onClick={(e) => e.stopPropagation()}>
+                    {module.sections.map((section, secIdx) => {
+                        const secKey = `${modIdx}-${secIdx}`;
+                        const isSecExpanded = expandedSubModules.includes(secKey);
                         return (
-                            <div key={subIdx} className="sub-module-item">
-                                <div className="sub-module-header" onClick={() => toggleSubModule(modIdx, subIdx)}>
-                                    <span style={{ fontWeight: '700', color: 'var(--accent)' }}>{sub.title}</span>
-                                    <span className={`expand-icon small ${isSubExpanded ? 'open' : ''}`}>▼</span>
+                            <div key={secIdx} className="section-item">
+                                <div className="section-header" onClick={() => toggleSubModule(modIdx, secIdx)}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <span style={{ fontWeight: '800', color: '#1e293b' }}>{section.section_title}</span>
+                                        <span className="step-time small">{section.estimated_time}</span>
+                                    </div>
+                                    <span className={`expand-icon small ${isSecExpanded ? 'open' : ''}`}>▼</span>
                                 </div>
-                                {isSubExpanded && (
-                                    <div className="sub-module-details">
-                                        <p style={{ margin: '8px 0', fontSize: '0.9rem', color: '#64748b' }}>{sub.description}</p>
-                                        <ul className="details-list">
-                                            {sub.details && sub.details.map((detail, dIdx) => (
-                                                <li key={dIdx}>{detail}</li>
-                                            ))}
-                                        </ul>
+                                {isSecExpanded && (
+                                    <div className="topics-list">
+                                        {section.topics && section.topics.map((topic, topIdx) => (
+                                            <div key={topIdx} className="topic-card">
+                                                <div className="topic-header">
+                                                    <h5 className="topic-name">{topic.topic_name}</h5>
+                                                    <div className="topic-meta">
+                                                        <span className={`difficulty-badge ${topic.difficulty?.toLowerCase()}`}>
+                                                            {topic.difficulty}
+                                                        </span>
+                                                        <span className="topic-duration">{topic.estimated_time}</span>
+                                                    </div>
+                                                </div>
+                                                <p className="topic-desc">{topic.description}</p>
+                                                {topic.learning_outcome && (
+                                                    <div className="learning-outcome">
+                                                        <strong>Outcome:</strong> {topic.learning_outcome}
+                                                    </div>
+                                                )}
+                                                {topic.prerequisites && topic.prerequisites.length > 0 && (
+                                                    <div className="prereqs">
+                                                        <strong>Prereqs:</strong> {topic.prerequisites.join(', ')}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
                                     </div>
                                 )}
                             </div>

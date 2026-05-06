@@ -102,59 +102,111 @@
     font-size: 0.6rem;
 }
 
-.sub-modules-list {
+.sections-list {
     margin-top: 1.5rem;
     padding-top: 1.5rem;
     border-top: 1px solid #f1f5f9;
     animation: fadeIn 0.3s ease-out;
 }
 
-.sub-module-item {
+.section-item {
     background: #f8fafc;
     border-radius: 16px;
-    margin-bottom: 0.75rem;
+    margin-bottom: 1rem;
     overflow: hidden;
-    border: 1px solid #f1f5f9;
+    border: 1px solid #e2e8f0;
 }
 
-.sub-module-header {
-    padding: 12px 16px;
+.section-header {
+    padding: 14px 20px;
     display: flex;
     justify-content: space-between;
     align-items: center;
     cursor: pointer;
     transition: background 0.2s;
+    background: #ffffff;
 }
 
-.sub-module-header:hover {
+.section-header:hover {
     background: #f1f5f9;
 }
 
-.sub-module-details {
-    padding: 0 16px 16px 16px;
-    animation: slideDown 0.3s ease-out;
+.topics-list {
+    padding: 1rem;
+    background: #f8fafc;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
 }
 
-.details-list {
-    list-style: none;
-    padding: 0;
-    margin: 8px 0 0 0;
+.topic-card {
+    background: white;
+    padding: 1.25rem;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
 }
 
-.details-list li {
-    padding: 6px 0;
-    padding-left: 20px;
-    position: relative;
+.topic-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 0.75rem;
+}
+
+.topic-name {
+    font-size: 1rem;
+    font-weight: 800;
+    color: #1e293b;
+    margin: 0;
+}
+
+.topic-meta {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.difficulty-badge {
+    font-size: 0.7rem;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.difficulty-badge.easy { background: #dcfce7; color: #166534; }
+.difficulty-badge.medium { background: #fef9c3; color: #854d0e; }
+.difficulty-badge.hard { background: #fee2e2; color: #991b1b; }
+
+.topic-duration {
+    font-size: 0.7rem;
+    color: #64748b;
+    font-weight: 600;
+}
+
+.topic-desc {
     font-size: 0.9rem;
     color: #475569;
+    line-height: 1.5;
+    margin-bottom: 0.75rem;
 }
 
-.details-list li::before {
-    content: "→";
-    position: absolute;
-    left: 0;
-    color: var(--accent);
-    font-weight: bold;
+.learning-outcome, .prereqs {
+    font-size: 0.8rem;
+    color: #64748b;
+    margin-top: 4px;
+    padding-top: 4px;
+    border-top: 1px dashed #e2e8f0;
+}
+
+.learning-outcome strong, .prereqs strong {
+    color: #334155;
+}
+
+.step-time.small {
+    padding: 2px 8px;
+    font-size: 0.7rem;
 }
 
 @keyframes slideDown {

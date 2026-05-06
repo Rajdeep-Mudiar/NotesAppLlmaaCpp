@@ -577,29 +577,69 @@ nlohmann::json AiService::buildRoadmap(const std::vector<std::string> & noteIds)
 
     const std::string prompt =
         "<|system|>\n"
-        "You are a Senior Educational Architect. Create a nested, 3-LEVEL learning ROADMAP based on the provided NOTES.\n"
-        "HIERARCHY RULES:\n"
-        "1. LEVEL 1 (Modules): Broad thematic areas (e.g., 'Fundamentals of Computer Vision').\n"
-        "2. LEVEL 2 (Sub-Modules): Specific topics within the module (e.g., 'Image Filtering Techniques').\n"
-        "3. LEVEL 3 (Details): Concrete learning points or actionable steps for that sub-module.\n"
-        "OUTPUT FORMAT: JSON array of objects.\n"
-        "JSON SCHEMA:\n"
+        "You are an expert curriculum designer for undergraduate learning paths.\n"
+        "\n"
+        "Convert the input notes into a detailed, atomic roadmap.\n"
+        "\n"
+        "Requirements:\n"
+        "- Output only valid JSON, no markdown, no explanation.\n"
+        "- The roadmap must contain modules, sections, and topics.\n"
+        "- Every module title must be specific and subject-based.\n"
+        "- Every section title must be specific and content-based.\n"
+        "- Every topic must be atomic, concrete, and teachable in one study session.\n"
+        "- Do not use vague topic names like Core Concepts, Foundations, Basics, Overview, Introduction, or General Knowledge.\n"
+        "- Do not use placeholder or generic labels unless followed by specific subtopics.\n"
+        "- If the input note is broad, break it into smaller learnable topics.\n"
+        "- Prefer verb-noun titles and concept-specific titles.\n"
+        "- Include theory, comparisons, workflows, examples, and practical study items.\n"
+        "- Expand abbreviations on first use.\n"
+        "- Order topics from beginner to advanced.\n"
+        "- If the note content is thin, infer useful foundational topics, but still keep them specific.\n"
+        "- Each section should contain 5 to 10 topics if possible.\n"
+        "- Each topic should have a clear description, estimated time, difficulty, prerequisites, and learning outcome.\n"
+        "\n"
+        "Topic quality examples:\n"
+        "- Good: What is Artificial Intelligence?\n"
+        "- Good: Types of Machine Learning: Supervised, Unsupervised, Reinforcement\n"
+        "- Good: Gradient Descent and how model training works\n"
+        "- Good: Overfitting, underfitting, and regularization\n"
+        "- Good: Training, validation, and test splits\n"
+        "- Bad: Core Concepts\n"
+        "- Bad: Foundations\n"
+        "- Bad: Introduction\n"
+        "- Bad: Basics\n"
+        "\n"
+        "Return exactly this JSON structure:\n"
         "[\n"
         "  {\n"
-        "    \"title\": \"Module [X]: [Title]\",\n"
-        "    \"description\": \"...\",\n"
-        "    \"sub_modules\": [\n"
+        "    \"module_title\": \"Module 1: <specific subject>\",\n"
+        "    \"description\": \"Short summary of the module\",\n"
+        "    \"total_estimated_time\": \"4 hours\",\n"
+        "    \"sections\": [\n"
         "      {\n"
-        "        \"title\": \"[X].[Y] [Sub-Title]\",\n"
-        "        \"description\": \"...\",\n"
-        "        \"details\": [\"Specific point 1\", \"Specific point 2\", \"Implementation detail\"]\n"
+        "        \"section_title\": \"<specific section title>\",\n"
+        "        \"estimated_time\": \"2 hours\",\n"
+        "        \"topics\": [\n"
+        "          {\n"
+        "            \"topic_name\": \"<atomic topic name>\",\n"
+        "            \"description\": \"<1-2 sentence explanation>\",\n"
+        "            \"estimated_time\": \"30 mins\",\n"
+        "            \"difficulty\": \"Easy\",\n"
+        "            \"prerequisites\": [\"<prerequisite 1>\", \"<prerequisite 2>\"],\n"
+        "            \"learning_outcome\": \"<what the learner will understand or be able to do>\"\n"
+        "          }\n"
+        "        ]\n"
         "      }\n"
         "    ]\n"
         "  }\n"
         "]\n"
-        "NOTES:\n" + context.str() + "</s>\n"
+        "\n"
+        "Input notes:\n" + context.str() + "\n"
+        "\n"
+        "Return only the JSON array.\n"
+        "</s>\n"
         "<|user|>\n"
-        "Generate a deeply nested, 3-level professional roadmap now.</s>\n"
+        "Generate the detailed atomic roadmap now.</s>\n"
         "<|assistant|>\n"
         "[";
 
@@ -622,28 +662,67 @@ nlohmann::json AiService::buildRoadmap(const std::vector<std::string> & noteIds)
         }
     } catch (...) {}
 
-    // Smart Fallback if AI fails: Break notes into nested modules
+    // Smart Fallback if AI fails: Break notes into detailed atomic modules
     if (roadmap.empty()) {
         for (size_t i = 0; i < filtered_notes.size(); ++i) {
             const auto& note = filtered_notes[i];
             
             nlohmann::json module;
-            module["title"] = "Module " + std::to_string(i + 1) + ": " + note.title;
-            module["description"] = "Comprehensive guide to " + note.title;
+            module["module_title"] = "Subject Mastery: " + note.title;
+            module["description"] = "A detailed breakdown of " + note.title + " into learnable atomic units.";
+            module["total_estimated_time"] = "6 hours";
             
-            nlohmann::json sub1, sub2;
-            sub1["title"] = std::to_string(i+1) + ".1 Core Foundations";
-            sub1["description"] = "Introduction and basic concepts of " + note.title;
-            sub1["details"] = {"Key definitions", "Historical context", "Primary use cases"};
+            nlohmann::json section;
+            section["section_title"] = "Theoretical and Practical " + note.title;
+            section["estimated_time"] = "6 hours";
             
-            sub2["title"] = std::to_string(i+1) + ".2 Implementation & Practice";
-            sub2["description"] = "Practical applications and advanced theories";
-            sub2["details"] = {"Technical workflow", "Common pitfalls", "Optimization strategies"};
+            nlohmann::json topics = nlohmann::json::array();
             
-            module["sub_modules"] = {sub1, sub2};
+            // Topic 1: Atomic Definition
+            topics.push_back({
+                {"topic_name", "What is " + note.title + "?"},
+                {"description", "Explaining the fundamental nature and identity of " + note.title + " in simple terms."},
+                {"estimated_time", "45 mins"},
+                {"difficulty", "Easy"},
+                {"prerequisites", {"None"}},
+                {"learning_outcome", "Accurately define " + note.title + " and its primary scope."}
+            });
+
+            // Topic 2: Structural Breakdown
+            topics.push_back({
+                {"topic_name", "Key Components and Mechanics"},
+                {"description", "Breaking down the constituent parts and internal logic of " + note.title + "."},
+                {"estimated_time", "90 mins"},
+                {"difficulty", "Medium"},
+                {"prerequisites", {"Introduction to " + note.title}},
+                {"learning_outcome", "Identify the core moving parts that make up " + note.title + "."}
+            });
+
+            // Topic 3: Comparative Analysis
+            topics.push_back({
+                {"topic_name", "Comparative Logic and Paradigms"},
+                {"description", "Comparing different styles, types, or approaches within " + note.title + "."},
+                {"estimated_time", "2 hours"},
+                {"difficulty", "Hard"},
+                {"prerequisites", {"Key Components"}},
+                {"learning_outcome", "Differentiate between various methodologies in the " + note.title + " space."}
+            });
+
+            // Topic 4: Application
+            topics.push_back({
+                {"topic_name", "Implementation and Real-World Usage"},
+                {"description", "Practical steps to apply " + note.title + " in a real-world project or scenario."},
+                {"estimated_time", "90 mins"},
+                {"difficulty", "Medium"},
+                {"prerequisites", {"Theoretical Foundations"}},
+                {"learning_outcome", "Apply the principles of " + note.title + " to solve a concrete problem."}
+            });
+            
+            section["topics"] = topics;
+            module["sections"] = {section};
             roadmap.push_back(module);
         }
     }
 
     return {{"roadmap", roadmap}};
-}
+}
