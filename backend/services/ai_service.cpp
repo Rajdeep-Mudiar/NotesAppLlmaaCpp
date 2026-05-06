@@ -577,32 +577,33 @@ nlohmann::json AiService::buildRoadmap(const std::vector<std::string> & noteIds)
 
     const std::string prompt =
         "<|system|>\n"
-        "You are a Senior Curriculum Designer and Subject Matter Expert. Create a HIGHLY DETAILED, MODULE-BASED learning ROADMAP based on the provided NOTES.\n"
-        "STRICT REQUIREMENTS:\n"
-        "1. MODULE STRUCTURE: Group concepts into logical 'Modules'. Each module should have 2-3 specific sub-steps.\n"
-        "2. PROGRESSION: Order the modules from fundamental theory to advanced implementation.\n"
-        "3. DEPTH: Do NOT just list the note titles. Extract specific concepts, algorithms, or theories mentioned inside the notes.\n"
-        "4. OUTPUT FORMAT: Respond ONLY with a JSON array of objects.\n"
+        "You are a Senior Educational Architect. Create a nested, 3-LEVEL learning ROADMAP based on the provided NOTES.\n"
+        "HIERARCHY RULES:\n"
+        "1. LEVEL 1 (Modules): Broad thematic areas (e.g., 'Fundamentals of Computer Vision').\n"
+        "2. LEVEL 2 (Sub-Modules): Specific topics within the module (e.g., 'Image Filtering Techniques').\n"
+        "3. LEVEL 3 (Details): Concrete learning points or actionable steps for that sub-module.\n"
+        "OUTPUT FORMAT: JSON array of objects.\n"
         "JSON SCHEMA:\n"
         "[\n"
         "  {\n"
-        "    \"title\": \"Module 1: [Module Name]\",\n"
-        "    \"description\": \"Detailed explanation of what will be learned, mentioning specific concepts like [Concept A] and [Concept B].\",\n"
-        "    \"estimated_time\": \"2 hours\"\n"
-        "  },\n"
-        "  {\n"
-        "    \"title\": \"Module 2: [Advanced Topic]\",\n"
-        "    \"description\": \"How to apply [Concept] to solve [Problem].\",\n"
-        "    \"estimated_time\": \"3 hours\"\n"
+        "    \"title\": \"Module [X]: [Title]\",\n"
+        "    \"description\": \"...\",\n"
+        "    \"sub_modules\": [\n"
+        "      {\n"
+        "        \"title\": \"[X].[Y] [Sub-Title]\",\n"
+        "        \"description\": \"...\",\n"
+        "        \"details\": [\"Specific point 1\", \"Specific point 2\", \"Implementation detail\"]\n"
+        "      }\n"
+        "    ]\n"
         "  }\n"
         "]\n"
-        "NOTES FOR CONTEXT:\n" + context.str() + "</s>\n"
+        "NOTES:\n" + context.str() + "</s>\n"
         "<|user|>\n"
-        "Create a comprehensive, professional roadmap divided into clear modules based on these notes.</s>\n"
+        "Generate a deeply nested, 3-level professional roadmap now.</s>\n"
         "<|assistant|>\n"
         "[";
 
-    std::string response = ai_engine_.generate(prompt, 3072);
+    std::string response = ai_engine_.generate(prompt, 4096);
     if (response.find('[') != 0 && response.find('{') != std::string::npos) {
         auto first_bracket = response.find('[');
         if (first_bracket != std::string::npos) response = response.substr(first_bracket);
@@ -621,24 +622,26 @@ nlohmann::json AiService::buildRoadmap(const std::vector<std::string> & noteIds)
         }
     } catch (...) {}
 
-    // Smart Fallback if AI fails: Break notes into modules
+    // Smart Fallback if AI fails: Break notes into nested modules
     if (roadmap.empty()) {
         for (size_t i = 0; i < filtered_notes.size(); ++i) {
             const auto& note = filtered_notes[i];
             
-            // Module 1: Fundamentals
-            nlohmann::json m1;
-            m1["title"] = "Module " + std::to_string(i*2 + 1) + ": Fundamentals of " + note.title;
-            m1["description"] = "Establish a strong base by understanding the core principles and definitions of " + note.title + " as outlined in your study materials.";
-            m1["estimated_time"] = "1.5 hours";
-            roadmap.push_back(m1);
-
-            // Module 2: Applied Concepts
-            nlohmann::json m2;
-            m2["title"] = "Module " + std::to_string(i*2 + 2) + ": Advanced Application of " + note.title;
-            m2["description"] = "Deep dive into the complex interactions and practical applications of " + note.title + ". Focus on synthesizing information with other related concepts.";
-            m2["estimated_time"] = "2.5 hours";
-            roadmap.push_back(m2);
+            nlohmann::json module;
+            module["title"] = "Module " + std::to_string(i + 1) + ": " + note.title;
+            module["description"] = "Comprehensive guide to " + note.title;
+            
+            nlohmann::json sub1, sub2;
+            sub1["title"] = std::to_string(i+1) + ".1 Core Foundations";
+            sub1["description"] = "Introduction and basic concepts of " + note.title;
+            sub1["details"] = {"Key definitions", "Historical context", "Primary use cases"};
+            
+            sub2["title"] = std::to_string(i+1) + ".2 Implementation & Practice";
+            sub2["description"] = "Practical applications and advanced theories";
+            sub2["details"] = {"Technical workflow", "Common pitfalls", "Optimization strategies"};
+            
+            module["sub_modules"] = {sub1, sub2};
+            roadmap.push_back(module);
         }
     }
 

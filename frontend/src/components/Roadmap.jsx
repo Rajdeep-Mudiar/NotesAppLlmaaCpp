@@ -4,6 +4,21 @@ import "../styles/roadmap.css";
 export default function Roadmap({ roadmap, notes, onGenerateRoadmap, busy }) {
   const [configuring, setConfiguring] = useState(!roadmap || roadmap.length === 0);
   const [selectedNoteIds, setSelectedNoteIds] = useState([]);
+  const [expandedModules, setExpandedModules] = useState([]);
+  const [expandedSubModules, setExpandedSubModules] = useState([]);
+
+  const toggleModule = (index) => {
+    setExpandedModules(prev => 
+      prev.includes(index) ? prev.filter(i => i !== index) : [...prev, index]
+    );
+  };
+
+  const toggleSubModule = (modIdx, subIdx) => {
+    const key = `${modIdx}-${subIdx}`;
+    setExpandedSubModules(prev => 
+      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+    );
+  };
 
   const handleToggleNote = (id) => {
     setSelectedNoteIds(prev => 
@@ -77,18 +92,47 @@ export default function Roadmap({ roadmap, notes, onGenerateRoadmap, busy }) {
 
       <div className="roadmap-container">
         <div className="timeline">
-          {roadmap.map((step, index) => (
-            <div key={index} className="timeline-item">
+          {roadmap.map((module, modIdx) => (
+            <div key={modIdx} className="timeline-item">
               <div className="timeline-marker">
-                <div className="marker-circle">{index + 1}</div>
-                {index < roadmap.length - 1 && <div className="marker-line"></div>}
+                <div className="marker-circle">{modIdx + 1}</div>
+                {modIdx < roadmap.length - 1 && <div className="marker-line"></div>}
               </div>
-              <div className="timeline-content">
+              <div 
+                className={`timeline-content ${expandedModules.includes(modIdx) ? 'expanded' : ''}`}
+                onClick={() => toggleModule(modIdx)}
+              >
                 <div className="step-header">
-                  <h4 className="step-title">{step.title}</h4>
-                  <span className="step-time">{step.estimated_time}</span>
+                  <h4 className="step-title">{module.title}</h4>
+                  <span className={`expand-icon ${expandedModules.includes(modIdx) ? 'open' : ''}`}>▼</span>
                 </div>
-                <p className="step-desc">{step.description}</p>
+                <p className="step-desc">{module.description}</p>
+                
+                {expandedModules.includes(modIdx) && module.sub_modules && (
+                  <div className="sub-modules-list" onClick={(e) => e.stopPropagation()}>
+                    {module.sub_modules.map((sub, subIdx) => {
+                        const isSubExpanded = expandedSubModules.includes(`${modIdx}-${subIdx}`);
+                        return (
+                            <div key={subIdx} className="sub-module-item">
+                                <div className="sub-module-header" onClick={() => toggleSubModule(modIdx, subIdx)}>
+                                    <span style={{ fontWeight: '700', color: 'var(--accent)' }}>{sub.title}</span>
+                                    <span className={`expand-icon small ${isSubExpanded ? 'open' : ''}`}>▼</span>
+                                </div>
+                                {isSubExpanded && (
+                                    <div className="sub-module-details">
+                                        <p style={{ margin: '8px 0', fontSize: '0.9rem', color: '#64748b' }}>{sub.description}</p>
+                                        <ul className="details-list">
+                                            {sub.details && sub.details.map((detail, dIdx) => (
+                                                <li key={dIdx}>{detail}</li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           ))}
