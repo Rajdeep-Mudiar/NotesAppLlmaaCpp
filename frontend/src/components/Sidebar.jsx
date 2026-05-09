@@ -10,6 +10,7 @@ export default function Sidebar({ views, activeView, onSwitch }) {
       case "graph": return "🕸️";
       case "roadmap": return "🗺️";
       case "learning": return "🎓";
+      case "summarizer": return "✨";
       default: return "📄";
     }
   };

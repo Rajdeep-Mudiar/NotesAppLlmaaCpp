@@ -758,3 +758,110 @@ nlohmann::json AiService::buildRoadmap(const std::vector<std::string> & noteIds)
 
     return {{"roadmap", roadmap}};
 }
+
+nlohmann::json AiService::buildNoteSummary(const std::vector<std::string> & noteIds) const {
+    auto all_notes = notes_service_.loadNotes();
+    std::vector<NoteRecord> filtered_notes;
+
+    for (const auto & id : noteIds) {
+        for (const auto & note : all_notes) {
+            if (note.id == id) {
+                filtered_notes.push_back(note);
+                break;
+            }
+        }
+    }
+
+    if (filtered_notes.empty()) {
+        return {{"error", "No notes found"}};
+    }
+
+    std::string note_title = "Selected Notes";
+    std::ostringstream note_content_stream;
+    
+    int char_count = 0;
+    for (const auto & note : filtered_notes) {
+        std::string entry = "NOTE TITLE: " + note.title + "\nCONTENT:\n" + note.content + "\n---\n";
+        if (char_count + entry.size() > 4000) {
+            note_content_stream << entry.substr(0, 4000 - char_count) << "...";
+            break;
+        }
+        note_content_stream << entry;
+        char_count += (int)entry.size();
+    }
+    std::string note_content = note_content_stream.str();
+
+    const std::string prompt =
+        "<|system|>\n"
+        "You are an expert summarizer and synthesizer.\n"
+        "Read the provided notes and output a structured 'Section-by-Section Summary'.\n"
+        "Requirements:\n"
+        "- Summarize the notes BY USING YOUR OWN LANGUAGE AND WORDS. DO NOT strictly copy the language from the notes. Paraphrase and explain concepts clearly.\n"
+        "- Output EXACTLY valid JSON. No markdown formatting, no code blocks.\n"
+        "- The JSON must have an 'overall_summary' string and a 'sections' array.\n"
+        "- Break the combined notes down into logical sections and summarize each one.\n"
+        "- Return exactly this JSON structure:\n"
+        "{\n"
+        "  \"overall_summary\": \"A brief 2-3 sentence overview of the entire selection, in your own words.\",\n"
+        "  \"sections\": [\n"
+        "    {\n"
+        "      \"heading\": \"<logical section heading>\",\n"
+        "      \"summary\": \"<summary of this specific section, paraphrased in your own words>\"\n"
+        "    }\n"
+        "  ]\n"
+        "}\n"
+        "Input Notes Content:\n" + note_content + "\n"
+        "</s>\n"
+        "<|user|>\n"
+        "Generate the structured JSON summary now, using your own words. ONLY output the raw JSON object.</s>\n"
+        "<|assistant|>\n"
+        "{";
+
+    std::string response = ai_engine_.generate(prompt, 2048);
+
+    if (response.find("```json") != std::string::npos) {
+        auto start_json = response.find("```json") + 7;
+        auto end_json = response.find("```", start_json);
+        if (end_json != std::string::npos) {
+            response = response.substr(start_json, end_json - start_json);
+        }
+    } else if (response.find("```") != std::string::npos) {
+        auto start_json = response.find("```") + 3;
+        auto end_json = response.find("```", start_json);
+        if (end_json != std::string::npos) {
+            response = response.substr(start_json, end_json - start_json);
+        }
+    }
+
+    // Trim leading whitespace
+    response.erase(response.begin(), std::find_if(response.begin(), response.end(), [](unsigned char ch) {
+        return !std::isspace(ch);
+    }));
+
+    if (response.empty() || response[0] != '{') {
+        response = "{" + response;
+    }
+
+    nlohmann::json summary_json;
+    try {
+        auto start = response.find('{');
+        auto end = response.rfind('}');
+        if (start != std::string::npos && end != std::string::npos && end >= start) {
+            std::string json_str = response.substr(start, end - start + 1);
+            auto parsed = nlohmann::json::parse(json_str, nullptr, false);
+            if (!parsed.is_discarded() && parsed.is_object()) {
+                summary_json = parsed;
+            }
+        }
+    } catch (...) {}
+
+    if (summary_json.empty() || !summary_json.contains("overall_summary")) {
+        summary_json["overall_summary"] = "A short summary combining your selected notes. " + summarize(note_content);
+        nlohmann::json sec = nlohmann::json::object();
+        sec["heading"] = "Key Content";
+        sec["summary"] = summarize(note_content);
+        summary_json["sections"] = {sec};
+    }
+
+    return summary_json;
+}

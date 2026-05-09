@@ -34,6 +34,10 @@ data/notes/.history/
 models/*.gguf
 models/*.bin
 models/*.safetensors
+models/*.zip
+
+# Common archive of models
+model.zip
 
 # Vendored engine source
 llama.cpp/
