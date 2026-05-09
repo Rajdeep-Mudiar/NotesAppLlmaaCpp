@@ -1,39 +1,102 @@
 # AI Second Brain Notes Application
 
-A privacy-focused, full-stack notes app with local AI features and cloud persistence. Built for speed, privacy, and extensibility.
+A privacy-focused, full-stack notes app with local AI features and cloud persistence. Built for speed, privacy, and extensibility. 
 
-**Tech Stack:**
+## 🚀 Tech Stack
 
-- **Frontend:** React + Vite (Modern JSX)
-- **Backend:** Pure C++20 (Custom HTTP/Socket server)
-- **Database:** MongoDB (via Python Storage Bridge)
-- **Local AI:** [llama.cpp](https://github.com/ggerganov/llama.cpp) (Streaming SSE & RAG)
-- **Orchestration:** PowerShell / Bash
+### Frontend
+- **React.js (Vite):** Blazing fast, modern frontend.
+- **Vanilla CSS:** Custom styling with modern UI/UX design, glassmorphism, and responsive layouts.
+- **React Markdown:** Rendering Markdown content dynamically.
 
----
+### Backend
+- **Pure C++20 API Server:** Custom-built HTTP and Socket server for high performance and low-level memory management.
+- **llama.cpp Submodule:** Direct integration with the `llama.cpp` inference engine for running local LLMs without relying on external cloud APIs.
+- **Server-Sent Events (SSE):** Streaming responses from the AI for real-time text generation.
 
-## Project Structure
+### Database & Storage Bridge
+- **MongoDB:** Cloud or local persistence layer.
+- **Python Storage Bridge (`pymongo`):** A lightweight Python wrapper to handle MongoDB connections and CRUD operations, interfacing with the C++ backend.
 
-- `backend/` — C++ API server and RAG logic.
-- `frontend/` — React UI.
-- `llama.cpp/` — Submodule/Folder for the inference engine.
-- `models/` — Local GGUF model files.
-- `data/` — Local cache and temporary storage.
-
----
-
-## Features
-
-- **Note Management:** Add, edit, delete notes with auto-tagging.
-- **RAG Chat:** Chat with your notes using local LLMs.
-- **Streaming UI:** Real-time AI responses via Server-Sent Events (SSE).
-- **Advanced Insights:** Knowledge graphs, flashcards, contradiction detection, and learning paths.
-- **Version History:** Snapshotting and restoration of previous note versions.
-- **Cloud Persistence:** Securely sync notes to MongoDB Atlas or a local instance.
+### Infrastructure & Orchestration
+- **PowerShell / Bash:** Scripts (`start-dev.ps1`) to orchestrate starting the frontend, compiling/running the C++ backend, the llama server, and the python bridge seamlessly.
 
 ---
 
-## Prerequisites
+## ✨ Features in Detail
+
+1. **Intelligent Note Management**
+   - **Create, Read, Update, Delete (CRUD):** Full control over your knowledge base.
+   - **Auto-Tagging:** The AI automatically categorizes and tags your notes based on content to organize your knowledge efficiently.
+   - **Version History:** Snapshotting system that tracks changes, allowing you to restore previous versions of your notes securely.
+
+2. **Retrieval-Augmented Generation (RAG) Chat**
+   - **Chat with your Second Brain:** Ask questions and get answers grounded entirely in your existing notes.
+   - **Local LLM Inference:** Completely private AI processing using `.gguf` models powered by `llama.cpp`. No data is sent to OpenAI or other third parties.
+   - **Streaming UI:** Answers stream in real-time via Server-Sent Events (SSE) for a seamless ChatGPT-like experience.
+
+3. **Advanced AI Insights & Tools**
+   - **Flashcard Generation:** Automatically generate study flashcards (Question & Answer pairs) from specific notes to aid active recall.
+   - **Learning Roadmaps:** Transform raw study notes into highly detailed, actionable undergraduate learning roadmaps using an AI curriculum designer persona.
+   - **Knowledge Graphs:** Discover connections and map relationships between different notes and topics visually.
+   - **Contradiction Detection:** AI scans your notes to find conflicting information or conflicting ideas.
+   - **Quiz Arena:** Auto-generated quizzes from your content with strict prompt-based constraints to guarantee the target question count.
+
+4. **Cloud & Local Persistence**
+   - **MongoDB Atlas Integration:** Sync your notes securely to the cloud.
+   - **Local Caching:** Temporary storage and fallback handling.
+
+---
+
+## 🏗️ Architecture Overview
+
+The following diagram illustrates the flow of data and the interaction between the different components of the system:
+
+```mermaid
+graph TD
+    subgraph Frontend [Frontend (Vite + React)]
+        UI[User Interface]
+        Chat[Chat / RAG Interface]
+        Notes[Notes Manager]
+        Flashcards[Flashcards & Quizzes]
+    end
+
+    subgraph Backend [Backend (C++20 Custom Server)]
+        HTTPServer[HTTP/SSE Server :8080]
+        NotesService[Notes Service]
+        AIService[AI Service & RAG Engine]
+        
+        HTTPServer <--> NotesService
+        HTTPServer <--> AIService
+    end
+
+    subgraph Llama [Local AI Engine]
+        LlamaServer[llama-server :8081]
+        GGUF[(Local .gguf Model)]
+        
+        LlamaServer <--> GGUF
+    end
+
+    subgraph Storage [Database Layer]
+        PythonBridge[Python Storage Bridge]
+        MongoDB[(MongoDB Atlas / Local)]
+        
+        PythonBridge <--> MongoDB
+    end
+
+    %% Connections
+    UI <-->|REST API| HTTPServer
+    Chat <-->|SSE Streaming| HTTPServer
+    Notes <-->|REST API| HTTPServer
+    Flashcards <-->|REST API| HTTPServer
+
+    AIService <-->|HTTP API| LlamaServer
+    NotesService <-->|Subprocess/Pipe| PythonBridge
+```
+
+---
+
+## 🛠️ Prerequisites
 
 ### General
 - **Node.js 18+** & **npm 9+**
@@ -49,7 +112,7 @@ A privacy-focused, full-stack notes app with local AI features and cloud persist
 
 ---
 
-## Environment Variables
+## ⚙️ Environment Variables
 
 Create a `.env` file in the `backend/` directory:
 
@@ -64,7 +127,7 @@ Create a `.env` file in the `backend/` directory:
 
 ---
 
-## How to Run
+## 🚀 How to Run
 
 ### 1. Initial Setup
 ```bash
@@ -82,8 +145,10 @@ cd llama.cpp
 cmake -S . -B build
 cmake --build build --config Debug -j # Or Release
 ```
- then activate the venv from root directory
- .\.venv\Scripts\Activate.ps1
+Then activate the venv from root directory (if applicable):
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
  
 ### 3. Quick Start (Windows)
 The easiest way to start the entire stack is using the provided PowerShell script:
@@ -117,7 +182,7 @@ npm run dev
 
 ---
 
-## API Endpoints
+## 📡 API Endpoints
 
 - `GET /health` — System status.
 - `GET /notes` — Fetch all notes from MongoDB.
@@ -130,7 +195,7 @@ npm run dev
 
 ---
 
-## Troubleshooting
+## 🐛 Troubleshooting
 
 - **"ModuleNotFoundError: No module named 'pymongo'"**:
   Run `pip install pymongo python-dotenv`.
@@ -143,6 +208,6 @@ npm run dev
 
 ---
 
-## License
+## 📄 License
 
 Personal and Educational use only. Built with ❤️ for the AI Second Brain community.
