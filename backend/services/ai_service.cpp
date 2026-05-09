@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <iostream>
+#include <map>
 #include <set>
 #include <sstream>
 #include <unordered_map>
@@ -566,89 +567,56 @@ nlohmann::json AiService::buildRoadmap(const std::vector<std::string> & noteIds)
         return {{"roadmap", nlohmann::json::array()}};
     }
 
-    std::ostringstream context;
-    int char_count = 0;
+    // Extract key concepts from notes to make roadmap more specific
+    std::vector<std::string> all_concepts;
+    std::ostringstream notes_summary;
+    
     for (const auto & note : filtered_notes) {
-        std::string entry = "NOTE: " + note.title + "\nCONTENT: " + note.content + "\n---\n";
-        if (char_count + entry.size() > 4000) break;
-        context << entry;
-        char_count += (int)entry.size();
+        auto concepts = extractConcepts(note);
+        all_concepts.insert(all_concepts.end(), concepts.begin(), concepts.end());
+        
+        // Create a brief summary of the note
+        std::string brief = note.content;
+        if (brief.size() > 300) brief = brief.substr(0, 297) + "...";
+        notes_summary << "- " << note.title << ": " << brief << "\n";
     }
 
+    // Remove duplicates and limit to 10 key concepts
+    std::sort(all_concepts.begin(), all_concepts.end());
+    all_concepts.erase(std::unique(all_concepts.begin(), all_concepts.end()), all_concepts.end());
+    if (all_concepts.size() > 10) all_concepts.resize(10);
+
+    const std::string key_concepts = joinList(all_concepts, ", ");
+
+    // Simplified, focused prompt for better AI compliance
     const std::string prompt =
         "<|system|>\n"
-        "You are an expert curriculum designer for undergraduate learning paths.\n"
-        "\n"
-        "Convert the input notes into a detailed, atomic roadmap.\n"
-        "\n"
-        "Requirements:\n"
-        "- Output only valid JSON, no markdown, no explanation.\n"
-        "- The roadmap must contain modules, sections, and topics.\n"
-        "- Every module title must be specific and subject-based.\n"
-        "- Every section title must be specific and content-based.\n"
-        "- Every topic must be atomic, concrete, and teachable in one study session.\n"
-        "- Do not use vague topic names like Core Concepts, Foundations, Basics, Overview, Introduction, or General Knowledge.\n"
-        "- Do not use placeholder or generic labels unless followed by specific subtopics.\n"
-        "- If the input note is broad, break it into smaller learnable topics.\n"
-        "- Prefer verb-noun titles and concept-specific titles.\n"
-        "- Include theory, comparisons, workflows, examples, and practical study items.\n"
-        "- Expand abbreviations on first use.\n"
-        "- Order topics from beginner to advanced.\n"
-        "- If the note content is thin, infer useful foundational topics, but still keep them specific.\n"
-        "- Each section should contain 5 to 10 topics if possible.\n"
-        "- Each topic should have a clear description, estimated time, difficulty, prerequisites, and learning outcome.\n"
-        "\n"
-        "Topic quality examples:\n"
-        "- Good: What is Artificial Intelligence?\n"
-        "- Good: Types of Machine Learning: Supervised, Unsupervised, Reinforcement\n"
-        "- Good: Gradient Descent and how model training works\n"
-        "- Good: Overfitting, underfitting, and regularization\n"
-        "- Good: Training, validation, and test splits\n"
-        "- Bad: Core Concepts\n"
-        "- Bad: Foundations\n"
-        "- Bad: Introduction\n"
-        "- Bad: Basics\n"
-        "\n"
-        "Return exactly this JSON structure:\n"
-        "[\n"
-        "  {\n"
-        "    \"module_title\": \"Module 1: <specific subject>\",\n"
-        "    \"description\": \"Short summary of the module\",\n"
-        "    \"total_estimated_time\": \"4 hours\",\n"
-        "    \"sections\": [\n"
-        "      {\n"
-        "        \"section_title\": \"<specific section title>\",\n"
-        "        \"estimated_time\": \"2 hours\",\n"
-        "        \"topics\": [\n"
-        "          {\n"
-        "            \"topic_name\": \"<atomic topic name>\",\n"
-        "            \"description\": \"<1-2 sentence explanation>\",\n"
-        "            \"estimated_time\": \"30 mins\",\n"
-        "            \"difficulty\": \"Easy\",\n"
-        "            \"prerequisites\": [\"<prerequisite 1>\", \"<prerequisite 2>\"],\n"
-        "            \"learning_outcome\": \"<what the learner will understand or be able to do>\"\n"
-        "          }\n"
-        "        ]\n"
-        "      }\n"
-        "    ]\n"
-        "  }\n"
-        "]\n"
-        "\n"
-        "Input notes:\n" + context.str() + "\n"
-        "\n"
-        "Return only the JSON array.\n"
+        "You are a learning path designer. Create a practical, deeply detailed roadmap based only on the supplied notes.\n"
+        "Output ONLY a valid JSON array. No explanation, no markdown, no code fences.\n"
         "</s>\n"
         "<|user|>\n"
-        "Generate the detailed atomic roadmap now.</s>\n"
+        "NOTES OVERVIEW:\n" + notes_summary.str() + "\n"
+        "KEY CONCEPTS: " + key_concepts + "\n\n"
+        "Create a learning roadmap with 2-4 modules. Each module must represent a distinct subject area from the notes.\n"
+        "For each module:\n"
+        "- Module title must be specific and grounded in the note titles or concepts\n"
+        "- 2-3 sections with descriptive titles that are not generic\n"
+        "- 3-4 concrete, specific topics per section\n"
+        "- Every topic must directly reference a concept, example, or idea from the notes\n"
+        "- Each topic needs: name, 2-3 sentence description, time estimate, difficulty (Beginner/Medium/Advanced), prerequisites, and a specific learning outcome\n"
+        "- Use verbs like compare, derive, apply, implement, troubleshoot, analyze, summarize, or extend when appropriate\n"
+        "- Do not repeat the same section title across modules\n"
+        "- Do not use vague topic names like Basics, Foundations, Overview, Introduction, or General Concepts\n"
+        "- Prefer titles that mention the actual subject from the notes (for example AI, ML, regression, tags, graphs, flashcards, quiz logic)\n\n"
+        "Output format:\n"
+        "[{\"module_title\":\"...\",\"description\":\"...\",\"total_estimated_time\":\"8 hours\",\"sections\":[{\"section_title\":\"...\",\"estimated_time\":\"3 hours\",\"topics\":[{\"topic_name\":\"...\",\"description\":\"...\",\"estimated_time\":\"45 mins\",\"difficulty\":\"Medium\",\"prerequisites\":[],\"learning_outcome\":\"...\"}]}]}]\n\n"
+        "NOW CREATE THE ROADMAP:</s>\n"
         "<|assistant|>\n"
         "[";
 
-    std::string response = ai_engine_.generate(prompt, 4096);
-    if (response.find('[') != 0 && response.find('{') != std::string::npos) {
-        auto first_bracket = response.find('[');
-        if (first_bracket != std::string::npos) response = response.substr(first_bracket);
-    }
-
+    std::string response = ai_engine_.generate(prompt, 2048);
+    
+    // Attempt JSON parsing
     nlohmann::json roadmap = nlohmann::json::array();
     try {
         auto start = response.find('[');
@@ -662,67 +630,249 @@ nlohmann::json AiService::buildRoadmap(const std::vector<std::string> & noteIds)
         }
     } catch (...) {}
 
-    // Smart Fallback if AI fails: Break notes into detailed atomic modules
+    // Smarter Fallback: Generate note-specific roadmaps based on actual content
     if (roadmap.empty()) {
-        for (size_t i = 0; i < filtered_notes.size(); ++i) {
-            const auto& note = filtered_notes[i];
-            
+        // Create one module per note so the roadmap stays grounded in the user's content
+        for (const auto & note : filtered_notes) {
             nlohmann::json module;
-            module["module_title"] = "Subject Mastery: " + note.title;
-            module["description"] = "A detailed breakdown of " + note.title + " into learnable atomic units.";
-            module["total_estimated_time"] = "6 hours";
+            const auto concepts = extractConcepts(note);
+            const std::string primary_topic = !concepts.empty() ? concepts.front() : note.title;
+            module["module_title"] = note.title;
             
-            nlohmann::json section;
-            section["section_title"] = "Theoretical and Practical " + note.title;
-            section["estimated_time"] = "6 hours";
-            
-            nlohmann::json topics = nlohmann::json::array();
-            
-            // Topic 1: Atomic Definition
-            topics.push_back({
-                {"topic_name", "What is " + note.title + "?"},
-                {"description", "Explaining the fundamental nature and identity of " + note.title + " in simple terms."},
+            std::ostringstream desc;
+            desc << "A roadmap built directly from the note content, centered on " << primary_topic << ".";
+            module["description"] = desc.str();
+            module["total_estimated_time"] = note.content.size() > 800 ? "12 hours" : "8 hours";
+
+            nlohmann::json sections = nlohmann::json::array();
+
+            // Section 1: Core ideas pulled from the note itself
+            nlohmann::json sec1;
+            sec1["section_title"] = "Core ideas in " + note.title;
+            sec1["estimated_time"] = "4 hours";
+            nlohmann::json tops1 = nlohmann::json::array();
+
+            const auto sentences = splitSentences(note.content);
+            for (std::size_t i = 0; i < concepts.size() && i < 3; ++i) {
+                const std::string & concept_name = concepts[i];
+                tops1.push_back({
+                    {"topic_name", concept_name},
+                    {"description", "Explain how " + concept_name + " appears in the note and why it matters."},
+                    {"estimated_time", i == 0 ? "45 mins" : "60 mins"},
+                    {"difficulty", i == 0 ? "Beginner" : "Medium"},
+                    {"prerequisites", nlohmann::json::array()},
+                    {"learning_outcome", "Summarize the role of " + concept_name + " in " + note.title}
+                });
+            }
+            if (tops1.empty()) {
+                tops1.push_back({
+                    {"topic_name", note.title},
+                    {"description", summarize(note.content)},
+                    {"estimated_time", "60 mins"},
+                    {"difficulty", "Beginner"},
+                    {"prerequisites", nlohmann::json::array()},
+                    {"learning_outcome", "Explain the main idea of " + note.title}
+                });
+            }
+            sec1["topics"] = tops1;
+            sections.push_back(sec1);
+
+            // Section 2: Application and practice based on the same note
+            nlohmann::json sec2;
+            sec2["section_title"] = "Applying " + note.title;
+            sec2["estimated_time"] = "3 hours";
+            nlohmann::json tops2 = nlohmann::json::array();
+
+            tops2.push_back({
+                {"topic_name", "Build a small project from the note"},
+                {"description", "Turn the note into a concrete exercise, implementation, or study task."},
+                {"estimated_time", "90 mins"},
+                {"difficulty", "Medium"},
+                {"prerequisites", concepts.empty() ? nlohmann::json::array() : nlohmann::json::array({concepts.front()})},
+                {"learning_outcome", "Use the note content in a practical scenario"}
+            });
+
+            tops2.push_back({
+                {"topic_name", "Common mistakes and clarifications"},
+                {"description", "Review confusing parts of the note and identify where misunderstandings usually happen."},
+                {"estimated_time", "60 mins"},
+                {"difficulty", "Medium"},
+                {"prerequisites", nlohmann::json::array()},
+                {"learning_outcome", "Spot weak understanding and correct it early"}
+            });
+
+            if (!sentences.empty()) {
+                tops2.push_back({
+                    {"topic_name", "Explain the note in your own words"},
+                    {"description", "Practice rewriting the note as a short explanation or summary."},
+                    {"estimated_time", "30 mins"},
+                    {"difficulty", "Beginner"},
+                    {"prerequisites", nlohmann::json::array()},
+                    {"learning_outcome", "Restate the note clearly without copying it"}
+                });
+            }
+
+            sec2["topics"] = tops2;
+            sections.push_back(sec2);
+
+            // Section 3: Extension and synthesis
+            nlohmann::json sec3;
+            sec3["section_title"] = "Extend and connect " + note.title;
+            sec3["estimated_time"] = "3 hours";
+            nlohmann::json tops3 = nlohmann::json::array();
+
+            tops3.push_back({
+                {"topic_name", "Compare with related ideas"},
+                {"description", "Compare the note's ideas with nearby concepts from the same field."},
+                {"estimated_time", "60 mins"},
+                {"difficulty", "Advanced"},
+                {"prerequisites", nlohmann::json::array()},
+                {"learning_outcome", "Explain how this note differs from related topics"}
+            });
+
+            tops3.push_back({
+                {"topic_name", "Create follow-up questions"},
+                {"description", "Generate questions that would deepen your understanding beyond the original note."},
                 {"estimated_time", "45 mins"},
-                {"difficulty", "Easy"},
-                {"prerequisites", {"None"}},
-                {"learning_outcome", "Accurately define " + note.title + " and its primary scope."}
-            });
-
-            // Topic 2: Structural Breakdown
-            topics.push_back({
-                {"topic_name", "Key Components and Mechanics"},
-                {"description", "Breaking down the constituent parts and internal logic of " + note.title + "."},
-                {"estimated_time", "90 mins"},
                 {"difficulty", "Medium"},
-                {"prerequisites", {"Introduction to " + note.title}},
-                {"learning_outcome", "Identify the core moving parts that make up " + note.title + "."}
+                {"prerequisites", nlohmann::json::array()},
+                {"learning_outcome", "Identify gaps and next learning steps"}
             });
 
-            // Topic 3: Comparative Analysis
-            topics.push_back({
-                {"topic_name", "Comparative Logic and Paradigms"},
-                {"description", "Comparing different styles, types, or approaches within " + note.title + "."},
-                {"estimated_time", "2 hours"},
-                {"difficulty", "Hard"},
-                {"prerequisites", {"Key Components"}},
-                {"learning_outcome", "Differentiate between various methodologies in the " + note.title + " space."}
+            tops3.push_back({
+                {"topic_name", "Summarize the full roadmap"},
+                {"description", "Turn the whole note into a compact study plan and revision checklist."},
+                {"estimated_time", "30 mins"},
+                {"difficulty", "Beginner"},
+                {"prerequisites", nlohmann::json::array()},
+                {"learning_outcome", "Produce a short revision guide from the note"}
             });
 
-            // Topic 4: Application
-            topics.push_back({
-                {"topic_name", "Implementation and Real-World Usage"},
-                {"description", "Practical steps to apply " + note.title + " in a real-world project or scenario."},
-                {"estimated_time", "90 mins"},
-                {"difficulty", "Medium"},
-                {"prerequisites", {"Theoretical Foundations"}},
-                {"learning_outcome", "Apply the principles of " + note.title + " to solve a concrete problem."}
-            });
-            
-            section["topics"] = topics;
-            module["sections"] = {section};
+            sec3["topics"] = tops3;
+            sections.push_back(sec3);
+
+            module["sections"] = sections;
             roadmap.push_back(module);
         }
     }
 
     return {{"roadmap", roadmap}};
+}
+
+nlohmann::json AiService::buildNoteSummary(const std::vector<std::string> & noteIds) const {
+    auto all_notes = notes_service_.loadNotes();
+    std::vector<NoteRecord> filtered_notes;
+
+    for (const auto & id : noteIds) {
+        for (const auto & note : all_notes) {
+            if (note.id == id) {
+                filtered_notes.push_back(note);
+                break;
+            }
+        }
+    }
+
+    if (filtered_notes.empty()) {
+        return {{"error", "No notes found"}};
+    }
+
+    std::string note_title = "Selected Notes";
+    std::ostringstream note_content_stream;
+    
+    int char_count = 0;
+    for (const auto & note : filtered_notes) {
+        std::string entry = "NOTE TITLE: " + note.title + "\nCONTENT:\n" + note.content + "\n---\n";
+        if (char_count + entry.size() > 4000) {
+            note_content_stream << entry.substr(0, 4000 - char_count) << "...";
+            break;
+        }
+        note_content_stream << entry;
+        char_count += (int)entry.size();
+    }
+    std::string note_content = note_content_stream.str();
+
+    const std::string prompt =
+        "<|system|>\n"
+        "You are an expert summarizer and synthesizer.\n"
+        "Read the provided notes and output a structured 'Section-by-Section Summary'.\n"
+        "Requirements:\n"
+        "- Summarize the notes BY USING YOUR OWN LANGUAGE AND WORDS. DO NOT strictly copy the language from the notes. Paraphrase and explain concepts clearly.\n"
+        "- Output EXACTLY valid JSON. No markdown formatting, no code blocks.\n"
+        "- The JSON must have an 'overall_summary' string and a 'sections' array.\n"
+        "- Break the combined notes down into logical sections and summarize each one.\n"
+        "- Return exactly this JSON structure:\n"
+        "{\n"
+        "  \"overall_summary\": \"A brief 2-3 sentence overview of the entire selection, in your own words.\",\n"
+        "  \"sections\": [\n"
+        "    {\n"
+        "      \"heading\": \"<logical section heading>\",\n"
+        "      \"summary\": \"<summary of this specific section, paraphrased in your own words>\"\n"
+        "    }\n"
+        "  ]\n"
+        "}\n"
+        "Input Notes Content:\n" + note_content + "\n"
+        "</s>\n"
+        "<|user|>\n"
+        "Generate the structured JSON summary now, using your own words. ONLY output the raw JSON object.</s>\n"
+        "<|assistant|>\n"
+        "{";
+
+    std::string response = ai_engine_.generate(prompt, 2048);
+
+    if (response.find("```json") != std::string::npos) {
+        auto start_json = response.find("```json") + 7;
+        auto end_json = response.find("```", start_json);
+        if (end_json != std::string::npos) {
+            response = response.substr(start_json, end_json - start_json);
+        }
+    } else if (response.find("```") != std::string::npos) {
+        auto start_json = response.find("```") + 3;
+        auto end_json = response.find("```", start_json);
+        if (end_json != std::string::npos) {
+            response = response.substr(start_json, end_json - start_json);
+        }
+    }
+
+    // Trim leading whitespace
+    response.erase(response.begin(), std::find_if(response.begin(), response.end(), [](unsigned char ch) {
+        return !std::isspace(ch);
+    }));
+
+    if (response.empty() || response[0] != '{') {
+        response = "{" + response;
+    }
+
+    nlohmann::json summary_json;
+    try {
+        auto start = response.find('{');
+        auto end = response.rfind('}');
+        if (start != std::string::npos && end != std::string::npos && end >= start) {
+            std::string json_str = response.substr(start, end - start + 1);
+            auto parsed = nlohmann::json::parse(json_str, nullptr, false);
+            if (!parsed.is_discarded() && parsed.is_object()) {
+                summary_json = parsed;
+            }
+        }
+    } catch (...) {}
+
+    if (summary_json.empty() || !summary_json.contains("overall_summary")) {
+        std::string fallback_text = response;
+        if (fallback_text.empty() || fallback_text == "{") {
+            // If AI failed completely, fallback to original content without truncation
+            fallback_text = note_content;
+        } else {
+            // Strip the leading `{` if it's there and unclosed
+            if (fallback_text[0] == '{') {
+                fallback_text = fallback_text.substr(1);
+            }
+        }
+        
+        summary_json["overall_summary"] = "The AI generated a summary, but the format could not be parsed correctly. Here is the raw output:\n\n" + fallback_text;
+        nlohmann::json sec = nlohmann::json::object();
+        sec["heading"] = "Raw Output";
+        sec["summary"] = "Please try summarizing again, or select fewer notes if the response was cut off.";
+        summary_json["sections"] = {sec};
+    }
+
+    return summary_json;
 }

@@ -4,7 +4,6 @@ const Notes = ({ notes, onSave, onDelete }) => {
   const [selectedNote, setSelectedNote] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-
   const filteredNotes = notes.filter(
     (n) =>
       n.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -36,6 +35,8 @@ const Notes = ({ notes, onSave, onDelete }) => {
     setIsEditing(true);
   };
 
+
+
   const handleSave = () => {
     if (!selectedNote.title || !selectedNote.content) {
       alert("Title and content are required.");
@@ -62,6 +63,7 @@ const Notes = ({ notes, onSave, onDelete }) => {
             <button className="btn-add" onClick={handleSave}>
               Post Note
             </button>
+
             <button
               className="btn-add"
               style={{ background: "#E4E6EB", color: "#050505" }}
@@ -79,6 +81,7 @@ const Notes = ({ notes, onSave, onDelete }) => {
           }
           placeholder="Start typing your notes..."
         />
+
         <div
           style={{
             marginTop: "1rem",

@@ -405,6 +405,20 @@ json handleRequest(const HttpRequest & request, AppContext & app) {
             return app.ai_service.buildLearningPath();
         }
 
+        if (request.method == "POST" && request.path == "/summarize") {
+            const auto body = parseJsonBody(request.body);
+            std::vector<std::string> noteIds;
+            if (body.contains("noteIds") && body["noteIds"].is_array()) {
+                noteIds = body["noteIds"].get<std::vector<std::string>>();
+            }
+            if (noteIds.empty()) {
+                json res = json::object();
+                res["error"] = "Note IDs are required";
+                return res;
+            }
+            return app.ai_service.buildNoteSummary(noteIds);
+        }
+
         if (request.method == "POST" && request.path == "/roadmap") {
             const auto body = parseJsonBody(request.body);
             std::vector<std::string> noteIds;

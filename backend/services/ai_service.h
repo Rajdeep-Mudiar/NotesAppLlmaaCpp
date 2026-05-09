@@ -21,6 +21,7 @@ public:
     nlohmann::json buildSelfQuestions() const;
     nlohmann::json buildIdeas() const;
     nlohmann::json buildRoadmap(const std::vector<std::string> & noteIds) const;
+    nlohmann::json buildNoteSummary(const std::vector<std::string> & noteIds) const;
 
 private:
     NotesService & notes_service_;

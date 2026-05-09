@@ -8,6 +8,7 @@ import Flashcards from "./components/Flashcards.jsx";
 import Quiz from "./components/Quiz.jsx";
 import Graph from "./components/Graph.jsx";
 import Roadmap from "./components/Roadmap.jsx";
+import Summarizer from "./components/Summarizer.jsx";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8080";
 
@@ -18,6 +19,7 @@ const views = [
   { id: "quiz", label: "Quiz Arena" },
   { id: "graph", label: "Knowledge Graph" },
   { id: "roadmap", label: "Roadmap" },
+  { id: "summarizer", label: "Summarizer" },
 ];
 
 async function request(path, payload) {
@@ -246,6 +248,25 @@ export default function App() {
               notes={notes} 
               onGenerateRoadmap={handleGenerateRoadmap}
               busy={busy}
+            />
+          ) : null}
+
+          {activeView === "summarizer" ? (
+            <Summarizer
+              notes={notes}
+              busy={busy}
+              onSummarize={async (noteIds) => {
+                setBusy(true);
+                try {
+                  const data = await request("/summarize", { noteIds });
+                  return data;
+                } catch (e) {
+                  setError("Failed to generate summary: " + e.message);
+                  return null;
+                } finally {
+                  setBusy(false);
+                }
+              }}
             />
           ) : null}
         </div>
