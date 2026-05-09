@@ -105,7 +105,7 @@ graph TD
     Features <-->|REST API & SSE| HTTPServer
     
     AIEngine <-->|HTTP POST| LlamaServer
-    AIEngine -.->|Spawn Pipe (Fallback)| LlamaCLI
+    AIEngine -. Spawn Pipe fallback .-> LlamaCLI
     
     NotesService <-->|Subprocess I/O| PythonBridge
 ```

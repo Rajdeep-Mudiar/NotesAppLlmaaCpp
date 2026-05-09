@@ -856,10 +856,21 @@ nlohmann::json AiService::buildNoteSummary(const std::vector<std::string> & note
     } catch (...) {}
 
     if (summary_json.empty() || !summary_json.contains("overall_summary")) {
-        summary_json["overall_summary"] = "A short summary combining your selected notes. " + summarize(note_content);
+        std::string fallback_text = response;
+        if (fallback_text.empty() || fallback_text == "{") {
+            // If AI failed completely, fallback to original content without truncation
+            fallback_text = note_content;
+        } else {
+            // Strip the leading `{` if it's there and unclosed
+            if (fallback_text[0] == '{') {
+                fallback_text = fallback_text.substr(1);
+            }
+        }
+        
+        summary_json["overall_summary"] = "The AI generated a summary, but the format could not be parsed correctly. Here is the raw output:\n\n" + fallback_text;
         nlohmann::json sec = nlohmann::json::object();
-        sec["heading"] = "Key Content";
-        sec["summary"] = summarize(note_content);
+        sec["heading"] = "Raw Output";
+        sec["summary"] = "Please try summarizing again, or select fewer notes if the response was cut off.";
         summary_json["sections"] = {sec};
     }
 
