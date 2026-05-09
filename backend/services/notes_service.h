@@ -32,11 +32,17 @@ public:
     std::string notePath(const std::string & id) const;
     std::string historyDirectory(const std::string & id) const;
 
+    // Generic Artifact Methods
+    nlohmann::json loadArtifacts(const std::string& collection_name) const;
+    nlohmann::json saveArtifact(const std::string& collection_name, const nlohmann::json& data);
+    bool deleteArtifact(const std::string& collection_name, const std::string& id);
+
+    static std::string nowIso8601();
+
 private:
     std::string base_directory_;
     std::string executable_dir_;
 
-    static std::string nowIso8601();
     static std::string newId();
     static std::string slugify(const std::string & value);
     static std::vector<std::string> normalizeTags(const std::vector<std::string> & tags);

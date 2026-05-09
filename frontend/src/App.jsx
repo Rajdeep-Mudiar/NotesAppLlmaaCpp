@@ -53,6 +53,10 @@ export default function App() {
   const [contradictions, setContradictions] = useState([]);
   const [learningPath, setLearningPath] = useState([]);
   const [roadmapData, setRoadmapData] = useState([]);
+  const [flashcardsHistory, setFlashcardsHistory] = useState([]);
+  const [quizHistory, setQuizHistory] = useState([]);
+  const [roadmapHistory, setRoadmapHistory] = useState([]);
+  const [summaryHistory, setSummaryHistory] = useState([]);
   const [selfQuestions, setSelfQuestions] = useState([]);
   const [ideas, setIdeas] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -133,17 +137,29 @@ export default function App() {
         flashcardsData,
         graphData,
         contradictionsData,
+        fhRes,
+        qhRes,
+        rhRes,
+        shRes
       ] = await Promise.all([
         loadNotes(),
         request("/flashcards"),
         request("/graph"),
         request("/contradictions"),
+        fetch(`${API_BASE}/history/flashcards`).then(r => r.json()),
+        fetch(`${API_BASE}/history/quizzes`).then(r => r.json()),
+        fetch(`${API_BASE}/history/roadmaps`).then(r => r.json()),
+        fetch(`${API_BASE}/history/summaries`).then(r => r.json())
       ]);
 
       setNotes(latestNotes);
       setFlashcards(flashcardsData.flashcards || []);
       setGraph(graphData);
       setContradictions(contradictionsData.contradictions || []);
+      setFlashcardsHistory(fhRes.history || []);
+      setQuizHistory(qhRes.history || []);
+      setRoadmapHistory(rhRes.history || []);
+      setSummaryHistory(shRes.history || []);
     } catch (requestError) {
       setError(requestError.message || "Unable to sync with the backend");
     } finally {
@@ -203,12 +219,15 @@ export default function App() {
           {activeView === "flashcards" ? (
             <Flashcards
               flashcards={flashcards}
+              history={flashcardsHistory}
               notes={notes}
+              onLoadHistory={(item) => setFlashcards(item.flashcards || [])}
               onGenerateFlashcards={async (count, difficulty, noteIds) => {
                 setBusy(true);
                 try {
                   const data = await request("/flashcards", { count, difficulty, noteIds });
                   setFlashcards(data.flashcards || []);
+                  refreshAll(); // Refresh history
                 } catch (e) {
                   setError("Failed to generate flashcards: " + e.message);
                 } finally {
@@ -222,12 +241,15 @@ export default function App() {
           {activeView === "quiz" ? (
             <Quiz
               quiz={quizQuestions}
+              history={quizHistory}
               notes={notes}
+              onLoadHistory={(item) => setQuizQuestions(item.questions || [])}
               onGenerateQuiz={async (count, difficulty, noteIds) => {
                 setBusy(true);
                 try {
                   const data = await request("/quiz", { count, difficulty, noteIds });
                   setQuizQuestions(data.questions || []);
+                  refreshAll(); // Refresh history
                 } catch (e) {
                   setError("Failed to generate quiz: " + e.message);
                 } finally {
@@ -245,8 +267,13 @@ export default function App() {
           {activeView === "roadmap" ? (
             <Roadmap 
               roadmap={roadmapData} 
+              history={roadmapHistory}
               notes={notes} 
-              onGenerateRoadmap={handleGenerateRoadmap}
+              onLoadHistory={(item) => setRoadmapData(item.roadmap || [])}
+              onGenerateRoadmap={async (noteIds) => {
+                await handleGenerateRoadmap(noteIds);
+                refreshAll(); // Refresh history
+              }}
               busy={busy}
             />
           ) : null}
@@ -254,11 +281,13 @@ export default function App() {
           {activeView === "summarizer" ? (
             <Summarizer
               notes={notes}
+              history={summaryHistory}
               busy={busy}
               onSummarize={async (noteIds) => {
                 setBusy(true);
                 try {
                   const data = await request("/summarize", { noteIds });
+                  refreshAll(); // Refresh history
                   return data;
                 } catch (e) {
                   setError("Failed to generate summary: " + e.message);

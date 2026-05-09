@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import "../styles/flashcards.css"; // Reuse the premium styles
 
-export default function Quiz({ quiz, notes, onGenerateQuiz, busy }) {
+export default function Quiz({ quiz, history, notes, onLoadHistory, onGenerateQuiz, busy }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [configuring, setConfiguring] = useState(true);
   const [selectedAnswer, setSelectedAnswer] = useState(null);
@@ -54,8 +54,8 @@ export default function Quiz({ quiz, notes, onGenerateQuiz, busy }) {
 
   if (configuring) {
     return (
-      <div className="flashcards-view" style={{ padding: '2rem' }}>
-        <div className="setup-container">
+      <div className="flashcards-view" style={{ padding: '2rem', display: 'flex', gap: '2rem', alignItems: 'flex-start' }}>
+        <div className="setup-container" style={{ flex: 2 }}>
           <header style={{ marginBottom: '2.5rem', textAlign: 'center' }}>
             <h1 style={{ fontSize: '2rem', fontWeight: '800', color: '#0f172a', marginBottom: '0.5rem' }}>Quiz Arena</h1>
             <p style={{ color: '#64748b' }}>Test your knowledge with AI-generated MCQs</p>
@@ -120,6 +120,39 @@ export default function Quiz({ quiz, notes, onGenerateQuiz, busy }) {
           >
             {busy ? "⚙️ Generating Arena..." : "Start Quiz"}
           </button>
+        </div>
+
+        <div className="setup-container" style={{ flex: 1, background: '#f8fafc', border: '1px dashed #cbd5e1' }}>
+          <h3 style={{ marginBottom: '1.5rem', fontWeight: '800', color: '#334155' }}>Recent History</h3>
+          {history && history.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {history.slice().reverse().map(item => (
+                <div 
+                  key={item.id} 
+                  className="history-card"
+                  style={{ padding: '15px', background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0', cursor: 'pointer', transition: 'all 0.2s' }}
+                  onClick={() => { 
+                    onLoadHistory(item); 
+                    setActiveIndex(0); 
+                    setSelectedAnswer(null); 
+                    setIsCorrect(null); 
+                    setScore(0); 
+                    setShowResults(false); 
+                    setConfiguring(false); 
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.transform = 'translateY(0)'; }}
+                >
+                  <div style={{ fontWeight: '700', color: '#0f172a' }}>{item.questions?.length || 0} Questions</div>
+                  <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '4px' }}>
+                    {new Date(item.created_at).toLocaleString()}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p style={{ color: '#94a3b8', fontSize: '0.9rem', textAlign: 'center' }}>No recent quiz sessions.</p>
+          )}
         </div>
       </div>
     );

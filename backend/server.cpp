@@ -379,7 +379,12 @@ json handleRequest(const HttpRequest & request, AppContext & app) {
             if (body.contains("noteIds") && body["noteIds"].is_array()) {
                 noteIds = body["noteIds"].get<std::vector<std::string>>();
             }
-            return app.ai_service.buildFlashcards(count, difficulty, noteIds);
+            auto res = app.ai_service.buildFlashcards(count, difficulty, noteIds);
+            if (!res.contains("error")) {
+                res["created_at"] = NotesService::nowIso8601();
+                res = app.notes_service.saveArtifact("flashcards", res);
+            }
+            return res;
         }
 
         if (request.method == "POST" && request.path == "/quiz") {
@@ -390,7 +395,12 @@ json handleRequest(const HttpRequest & request, AppContext & app) {
             if (body.contains("noteIds") && body["noteIds"].is_array()) {
                 noteIds = body["noteIds"].get<std::vector<std::string>>();
             }
-            return app.ai_service.buildQuiz(count, difficulty, noteIds);
+            auto res = app.ai_service.buildQuiz(count, difficulty, noteIds);
+            if (!res.contains("error")) {
+                res["created_at"] = NotesService::nowIso8601();
+                res = app.notes_service.saveArtifact("quizzes", res);
+            }
+            return res;
         }
 
         if (request.method == "POST" && request.path == "/graph") {
@@ -416,7 +426,12 @@ json handleRequest(const HttpRequest & request, AppContext & app) {
                 res["error"] = "Note IDs are required";
                 return res;
             }
-            return app.ai_service.buildNoteSummary(noteIds);
+            auto res = app.ai_service.buildNoteSummary(noteIds);
+            if (!res.contains("error")) {
+                res["created_at"] = NotesService::nowIso8601();
+                res = app.notes_service.saveArtifact("summaries", res);
+            }
+            return res;
         }
 
         if (request.method == "POST" && request.path == "/roadmap") {
@@ -425,7 +440,20 @@ json handleRequest(const HttpRequest & request, AppContext & app) {
             if (body.contains("noteIds") && body["noteIds"].is_array()) {
                 noteIds = body["noteIds"].get<std::vector<std::string>>();
             }
-            return app.ai_service.buildRoadmap(noteIds);
+            auto res = app.ai_service.buildRoadmap(noteIds);
+            if (!res.contains("error")) {
+                res["created_at"] = NotesService::nowIso8601();
+                res = app.notes_service.saveArtifact("roadmaps", res);
+            }
+            return res;
+        }
+
+        if (request.method == "GET" && request.path.find("/history/") == 0) {
+            std::string type = request.path.substr(9); // remove "/history/"
+            json items = app.notes_service.loadArtifacts(type);
+            json res = json::object();
+            res["history"] = items;
+            return res;
         }
 
         if (request.method == "POST" && request.path == "/history") {

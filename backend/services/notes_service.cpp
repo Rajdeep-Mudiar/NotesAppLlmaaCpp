@@ -76,7 +76,7 @@ NoteRecord NotesService::addNote(const std::string & title, const std::string & 
     }
 
     std::string bridge_path = (fs::path(executable_dir_) / "storage_bridge.py").string();
-    std::string cmd = "\"" + python_cmd + "\" \"" + bridge_path + "\" save_file \"" + temp_path + "\"";
+    std::string cmd = "\"" + python_cmd + "\" \"" + bridge_path + "\" save_file notes \"" + temp_path + "\"";
     std::string out = execCommand(cmd);
     
     if (out.empty()) {
@@ -126,7 +126,7 @@ bool NotesService::updateNote(const std::string & id, const std::string & title,
     }
 
     std::string bridge_path = (fs::path(executable_dir_) / "storage_bridge.py").string();
-    std::string cmd = "\"" + python_cmd + "\" \"" + bridge_path + "\" save_file \"" + temp_path + "\"";
+    std::string cmd = "\"" + python_cmd + "\" \"" + bridge_path + "\" save_file notes \"" + temp_path + "\"";
     execCommand(cmd);
     return true;
 }
@@ -139,7 +139,7 @@ bool NotesService::deleteNote(const std::string & id) {
 
     std::string bridge_path = (fs::path(executable_dir_) / "storage_bridge.py").string();
     std::cout << "[DEBUG] Deleting note: " << id << std::endl;
-    execCommand("\"" + python_cmd + "\" \"" + bridge_path + "\" delete " + id);
+    execCommand("\"" + python_cmd + "\" \"" + bridge_path + "\" delete notes " + id);
     return true;
 }
 
@@ -150,7 +150,7 @@ std::vector<NoteRecord> NotesService::loadNotes() const {
     }
 
     std::string bridge_path = (fs::path(executable_dir_) / "storage_bridge.py").string();
-    std::string cmd = "\"" + python_cmd + "\" \"" + bridge_path + "\" list";
+    std::string cmd = "\"" + python_cmd + "\" \"" + bridge_path + "\" list notes";
     std::string out = execCommand(cmd);
     
     try {
@@ -328,6 +328,63 @@ NoteRecord NotesService::readNoteFile(const std::string & path) const { return {
 std::string NotesService::slugify(const std::string & value) { return value; }
 std::string NotesService::newId() { return ""; }
 std::string NotesService::baseDirectory() const { return base_directory_; }
+
+nlohmann::json NotesService::loadArtifacts(const std::string& collection_name) const {
+    std::string python_cmd = "python";
+    if (const char* env_p = std::getenv("SECOND_BRAIN_PYTHON")) {
+        python_cmd = sanitizePathValue(env_p);
+    }
+    std::string bridge_path = (fs::path(executable_dir_) / "storage_bridge.py").string();
+    std::string cmd = "\"" + python_cmd + "\" \"" + bridge_path + "\" list " + collection_name;
+    std::string out = execCommand(cmd);
+    
+    try {
+        size_t first = out.find('[');
+        size_t last = out.find_last_of(']');
+        if (first == std::string::npos || last == std::string::npos) return nlohmann::json::array();
+        std::string json_part = out.substr(first, last - first + 1);
+        auto j = nlohmann::json::parse(json_part, nullptr, false);
+        if (j.is_discarded()) return nlohmann::json::array();
+        return j;
+    } catch (...) { return nlohmann::json::array(); }
+}
+
+nlohmann::json NotesService::saveArtifact(const std::string& collection_name, const nlohmann::json& data) {
+    std::string temp_path = (fs::path(executable_dir_) / ("temp_add_" + collection_name + ".json")).string();
+    std::ofstream tmp(temp_path);
+    tmp << data.dump();
+    tmp.close();
+
+    std::string python_cmd = "python";
+    if (const char* env_p = std::getenv("SECOND_BRAIN_PYTHON")) {
+        python_cmd = sanitizePathValue(env_p);
+    }
+    std::string bridge_path = (fs::path(executable_dir_) / "storage_bridge.py").string();
+    std::string cmd = "\"" + python_cmd + "\" \"" + bridge_path + "\" save_file " + collection_name + " \"" + temp_path + "\"";
+    std::string out = execCommand(cmd);
+    
+    try {
+        size_t first = out.find('{');
+        size_t last = out.find_last_of('}');
+        if (first == std::string::npos || last == std::string::npos) throw std::runtime_error("Invalid output");
+        std::string json_part = out.substr(first, last - first + 1);
+        auto res = nlohmann::json::parse(json_part);
+        
+        nlohmann::json saved_data = data;
+        saved_data["id"] = res["id"];
+        return saved_data;
+    } catch (...) { return data; }
+}
+
+bool NotesService::deleteArtifact(const std::string& collection_name, const std::string& id) {
+    std::string python_cmd = "python";
+    if (const char* env_p = std::getenv("SECOND_BRAIN_PYTHON")) {
+        python_cmd = sanitizePathValue(env_p);
+    }
+    std::string bridge_path = (fs::path(executable_dir_) / "storage_bridge.py").string();
+    execCommand("\"" + python_cmd + "\" \"" + bridge_path + "\" delete " + collection_name + " " + id);
+    return true;
+}
 
 void to_json(nlohmann::json & j, const NoteRecord & n) {
     j = nlohmann::json::object();
