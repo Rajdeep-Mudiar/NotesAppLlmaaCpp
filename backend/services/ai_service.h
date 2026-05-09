@@ -13,12 +13,14 @@ public:
 
     nlohmann::json buildSearchResponse(const std::string & query, const std::string & mode, const std::string & persona) const;
     nlohmann::json buildInsights() const;
-    nlohmann::json buildFlashcards() const;
+    nlohmann::json buildFlashcards(int count = 5, const std::string & difficulty = "medium", const std::vector<std::string> & noteIds = {}) const;
     nlohmann::json buildGraph() const;
     nlohmann::json buildContradictions() const;
     nlohmann::json buildLearningPath() const;
+    nlohmann::json buildQuiz(int count = 5, const std::string & difficulty = "medium", const std::vector<std::string> & noteIds = {}) const;
     nlohmann::json buildSelfQuestions() const;
     nlohmann::json buildIdeas() const;
+    nlohmann::json buildRoadmap(const std::vector<std::string> & noteIds) const;
 
 private:
     NotesService & notes_service_;

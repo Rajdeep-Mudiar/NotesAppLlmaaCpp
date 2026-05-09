@@ -9,6 +9,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <future>
 #include <iostream>
 #include <map>
@@ -21,11 +22,9 @@
 #if defined(_WIN32)
 #include <winsock2.h>
 #include <ws2tcpip.h>
-#pragma comment(lib, "Ws2_32.lib")
-using socket_t = SOCKET;
+using socket_t = UINT_PTR;
 static constexpr socket_t invalid_socket = INVALID_SOCKET;
 #else
-#include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -37,6 +36,37 @@ namespace fs = std::filesystem;
 using json = nlohmann::json;
 
 namespace {
+void loadEnv(const std::string & filename) {
+    std::ifstream file(filename);
+    if (!file.is_open()) return;
+    std::string line;
+    while (std::getline(file, line)) {
+        if (line.empty() || line[0] == '#') continue;
+        auto pos = line.find('=');
+        if (pos != std::string::npos) {
+            std::string key = line.substr(0, pos);
+            std::string value = line.substr(pos + 1);
+            // Trim whitespace/quotes
+            auto trim = [](std::string s) {
+                s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](unsigned char ch) {
+                    return !std::isspace(ch) && ch != '"' && ch != '\'';
+                }));
+                s.erase(std::find_if(s.rbegin(), s.rend(), [](unsigned char ch) {
+                    return !std::isspace(ch) && ch != '"' && ch != '\'';
+                }).base(), s.end());
+                return s;
+            };
+            key = trim(key);
+            value = trim(value);
+#if defined(_WIN32)
+            _putenv_s(key.c_str(), value.c_str());
+#else
+            setenv(key.c_str(), value.c_str(), 1);
+#endif
+        }
+    }
+}
+
 struct HttpRequest {
     std::string method;
     std::string path;
@@ -50,7 +80,7 @@ struct AppContext {
     AiService ai_service;
 
     AppContext(const std::filesystem::path & executable_dir)
-        : notes_service(resolveDataDir(executable_dir)), ai_engine(resolveLlamaBinary(executable_dir), resolveModelPath(executable_dir)), ai_service(notes_service, ai_engine) {}
+        : notes_service(resolveDataDir(executable_dir), executable_dir.string()), ai_engine(resolveLlamaBinary(executable_dir), resolveModelPath(executable_dir)), ai_service(notes_service, ai_engine) {}
 
     static std::string resolveDataDir(const std::filesystem::path & executable_dir) {
         if (const char * env = std::getenv("SECOND_BRAIN_DATA_DIR")) {
@@ -85,18 +115,34 @@ struct AppContext {
     }
 
     static std::string resolveModelPath(const std::filesystem::path & executable_dir) {
-        if (const char * env = std::getenv("SECOND_BRAIN_MODEL_PATH")) {
-            return env;
+        const char * env = std::getenv("SECOND_BRAIN_MODEL_PATH");
+        if (env != nullptr) {
+            const fs::path env_path = env;
+            if (fs::exists(env_path)) {
+                return env_path.lexically_normal().string();
+            }
         }
-        return (executable_dir / ".." / "models" / "model.gguf").lexically_normal().string();
+
+        const std::vector<fs::path> candidates = {
+            executable_dir / ".." / "models" / "model.gguf",
+            executable_dir / "models" / "model.gguf",
+        };
+
+        for (const auto & candidate : candidates) {
+            if (fs::exists(candidate)) {
+                return candidate.lexically_normal().string();
+            }
+        }
+
+        return env ? env : "models/model.gguf";
     }
 };
 
-std::string trim(std::string value) {
-    auto is_space = [](unsigned char ch) { return std::isspace(ch) != 0; };
-    value.erase(value.begin(), std::find_if(value.begin(), value.end(), [&](char ch) { return !is_space(static_cast<unsigned char>(ch)); }));
-    value.erase(std::find_if(value.rbegin(), value.rend(), [&](char ch) { return !is_space(static_cast<unsigned char>(ch)); }).base(), value.end());
-    return value;
+std::string trim(const std::string & s) {
+    auto start = s.find_first_not_of(" \t\r\n");
+    if (start == std::string::npos) return "";
+    auto end = s.find_last_not_of(" \t\r\n");
+    return s.substr(start, end - start + 1);
 }
 
 std::string lower(std::string value) {
@@ -161,7 +207,16 @@ std::string statusText(int status) {
 }
 
 std::string makeResponse(int status, const json & body) {
-    const std::string payload = body.dump(2);
+    std::string payload;
+    try {
+        // Use error_handler_t::replace to handle invalid UTF-8 from AI response
+        payload = body.dump(2, ' ', false, nlohmann::json::error_handler_t::replace);
+    } catch (const std::exception& e) {
+        std::cerr << "[CRITICAL] JSON dump failed: " << e.what() << ". Falling back to safe error message." << std::endl;
+        payload = "{\"error\": \"Internal server error during JSON serialization\"}";
+        status = 500;
+    }
+    
     std::ostringstream response;
     response << "HTTP/1.1 " << status << " " << statusText(status) << "\r\n";
     response << "Content-Type: application/json; charset=utf-8\r\n";
@@ -192,62 +247,72 @@ std::string makeSseData(const json & payload) {
 
 std::string readFromSocket(socket_t client_socket) {
     std::string data;
-    char buffer[4096];
+    char buffer[8192];
     while (true) {
         const int received = static_cast<int>(recv(client_socket, buffer, sizeof(buffer), 0));
         if (received <= 0) {
             break;
         }
-        data.append(buffer, buffer + received);
-        const auto separator = data.find("\r\n\r\n");
-        if (separator == std::string::npos) {
-            continue;
-        }
-        const auto header_part = data.substr(0, separator);
-        const auto body_length_pos = lower(header_part).find("content-length:");
-        if (body_length_pos == std::string::npos) {
-            break;
-        }
-        const auto end_of_line = header_part.find("\r\n", body_length_pos);
-        const auto line = header_part.substr(body_length_pos, end_of_line - body_length_pos);
-        const auto colon = line.find(':');
-        const auto length_text = trim(line.substr(colon + 1));
-        const auto length = static_cast<std::size_t>(std::stoull(length_text));
-        const auto body_received = data.size() - (separator + 4);
-        if (body_received >= length) {
-            break;
+        data.append(buffer, received);
+        
+        if (data.find("\r\n\r\n") != std::string::npos) {
+            if (data.find("GET") == 0 || data.find("OPTIONS") == 0) break;
+            
+            auto cl_pos = data.find("Content-Length:");
+            if (cl_pos == std::string::npos) {
+                // For POST without Content-Length, we might have issues, but let's assume end for now
+                break;
+            } else {
+                auto cl_end = data.find("\r\n", cl_pos);
+                if (cl_end != std::string::npos) {
+                    try {
+                        std::string len_str = trim(data.substr(cl_pos + 15, cl_end - (cl_pos + 15)));
+                        if (!len_str.empty()) {
+                            int expected_length = std::stoi(len_str);
+                            auto body_start = data.find("\r\n\r\n") + 4;
+                            if (data.size() - body_start >= static_cast<std::size_t>(expected_length)) break;
+                        }
+                    } catch (...) {
+                        break; // Malformed Content-Length, stop reading
+                    }
+                }
+            }
         }
     }
     return data;
 }
 
-bool sendAll(socket_t client_socket, const std::string & response) {
-    std::size_t sent_total = 0;
-    while (sent_total < response.size()) {
-        const int sent = static_cast<int>(send(client_socket, response.data() + sent_total, static_cast<int>(response.size() - sent_total), 0));
+bool sendAll(socket_t socket, const std::string & data) {
+    std::size_t total_sent = 0;
+    while (total_sent < data.size()) {
+        const int sent = static_cast<int>(send(socket, data.data() + total_sent, static_cast<int>(data.size() - total_sent), 0));
         if (sent <= 0) {
             return false;
         }
-        sent_total += static_cast<std::size_t>(sent);
+        total_sent += sent;
     }
     return true;
 }
 
 json parseJsonBody(const std::string & body) {
-    if (body.empty()) {
+    try {
+        return json::parse(body);
+    } catch (...) {
         return json::object();
     }
-    return json::parse(body);
 }
 
 json handleRequest(const HttpRequest & request, AppContext & app) {
-    if (request.method == "OPTIONS") {
-        return json{{"status", "ok"}};
-    }
-
     try {
-        if (request.method == "GET" && request.path == "/health") {
-            return json{{"status", "ok"}, {"notes_dir", app.notes_service.baseDirectory()}};
+        if (request.method == "OPTIONS") {
+            return json::object();
+        }
+
+        if (request.path == "/health") {
+            json res = json::object();
+            res["status"] = "ok";
+            res["notes_dir"] = app.notes_service.baseDirectory();
+            return res;
         }
 
         if (request.method == "GET" && request.path == "/notes") {
@@ -255,33 +320,47 @@ json handleRequest(const HttpRequest & request, AppContext & app) {
             for (const auto & note : app.notes_service.loadNotes()) {
                 notes.push_back(note);
             }
-            return json{{"notes", notes}};
+            json res = json::object();
+            res["notes"] = notes;
+            return res;
         }
 
-        if (request.method == "POST" && request.path == "/add") {
-            const auto body = parseJsonBody(request.body);
-            const auto title = body.value("title", "");
-            const auto content = body.value("content", "");
-            std::vector<std::string> tags = body.contains("tags") ? body["tags"].get<std::vector<std::string>>() : std::vector<std::string>{};
-            const auto note = app.notes_service.addNote(title, content, tags);
-            return json{{"note", note}};
-        }
-
-        if (request.method == "POST" && request.path == "/update") {
+        if (request.method == "POST" && (request.path == "/add" || request.path == "/save-note")) {
+            std::cout << "[DEBUG] Raw Body: " << request.body << std::endl;
             const auto body = parseJsonBody(request.body);
             const auto id = body.value("id", "");
             const auto title = body.value("title", "");
             const auto content = body.value("content", "");
-            std::vector<std::string> tags = body.contains("tags") ? body["tags"].get<std::vector<std::string>>() : std::vector<std::string>{};
-            const bool updated = app.notes_service.updateNote(id, title, content, tags);
-            return json{{"updated", updated}};
+            
+            std::vector<std::string> tags;
+            if (body.contains("tags") && body["tags"].is_array()) {
+                tags = body["tags"].get<std::vector<std::string>>();
+            }
+
+            if (id.empty()) {
+                const auto note = app.notes_service.addNote(title, content, tags);
+                json res = json::object();
+                res["note"] = note;
+                return res;
+            } else {
+                const bool updated = app.notes_service.updateNote(id, title, content, tags);
+                json res = json::object();
+                res["updated"] = updated;
+                return res;
+            }
         }
 
-        if (request.method == "POST" && request.path == "/delete") {
+        if (request.method == "POST" && (request.path == "/delete" || request.path == "/delete-note")) {
             const auto body = parseJsonBody(request.body);
             const auto id = body.value("id", "");
             const bool deleted = app.notes_service.deleteNote(id);
-            return json{{"deleted", deleted}};
+            json res = json::object();
+            res["deleted"] = deleted;
+            return res;
+        }
+
+        if (request.method == "POST" && request.path == "/insights") {
+            return app.ai_service.buildInsights();
         }
 
         if (request.method == "POST" && request.path == "/search") {
@@ -292,26 +371,26 @@ json handleRequest(const HttpRequest & request, AppContext & app) {
             return app.ai_service.buildSearchResponse(query, mode, persona);
         }
 
-        if (request.method == "POST" && request.path == "/history") {
-            const auto body = parseJsonBody(request.body);
-            const auto id = body.value("id", "");
-            return json{{"versions", app.notes_service.noteHistory(id)}};
-        }
-
-        if (request.method == "POST" && request.path == "/restore-version") {
-            const auto body = parseJsonBody(request.body);
-            const auto id = body.value("id", "");
-            const auto version_file = body.value("version_file", "");
-            const bool restored = app.notes_service.restoreVersion(id, version_file);
-            return json{{"restored", restored}};
-        }
-
-        if (request.method == "POST" && request.path == "/insights") {
-            return app.ai_service.buildInsights();
-        }
-
         if (request.method == "POST" && request.path == "/flashcards") {
-            return app.ai_service.buildFlashcards();
+            const auto body = parseJsonBody(request.body);
+            const int count = body.value("count", 5);
+            const std::string difficulty = body.value("difficulty", "medium");
+            std::vector<std::string> noteIds;
+            if (body.contains("noteIds") && body["noteIds"].is_array()) {
+                noteIds = body["noteIds"].get<std::vector<std::string>>();
+            }
+            return app.ai_service.buildFlashcards(count, difficulty, noteIds);
+        }
+
+        if (request.method == "POST" && request.path == "/quiz") {
+            const auto body = parseJsonBody(request.body);
+            const int count = body.value("count", 5);
+            const std::string difficulty = body.value("difficulty", "medium");
+            std::vector<std::string> noteIds;
+            if (body.contains("noteIds") && body["noteIds"].is_array()) {
+                noteIds = body["noteIds"].get<std::vector<std::string>>();
+            }
+            return app.ai_service.buildQuiz(count, difficulty, noteIds);
         }
 
         if (request.method == "POST" && request.path == "/graph") {
@@ -326,6 +405,33 @@ json handleRequest(const HttpRequest & request, AppContext & app) {
             return app.ai_service.buildLearningPath();
         }
 
+        if (request.method == "POST" && request.path == "/roadmap") {
+            const auto body = parseJsonBody(request.body);
+            std::vector<std::string> noteIds;
+            if (body.contains("noteIds") && body["noteIds"].is_array()) {
+                noteIds = body["noteIds"].get<std::vector<std::string>>();
+            }
+            return app.ai_service.buildRoadmap(noteIds);
+        }
+
+        if (request.method == "POST" && request.path == "/history") {
+            const auto body = parseJsonBody(request.body);
+            const auto id = body.value("id", "");
+            json res = json::object();
+            res["versions"] = app.notes_service.noteHistory(id);
+            return res;
+        }
+
+        if (request.method == "POST" && request.path == "/restore-version") {
+            const auto body = parseJsonBody(request.body);
+            const auto id = body.value("id", "");
+            const auto version_file = body.value("version_file", "");
+            const bool restored = app.notes_service.restoreVersion(id, version_file);
+            json res = json::object();
+            res["restored"] = restored;
+            return res;
+        }
+
         if (request.method == "POST" && request.path == "/questions") {
             return app.ai_service.buildSelfQuestions();
         }
@@ -334,9 +440,14 @@ json handleRequest(const HttpRequest & request, AppContext & app) {
             return app.ai_service.buildIdeas();
         }
 
-        return json{{"error", "Route not found"}};
+        json res = json::object();
+        res["error"] = "Route not found: " + request.path;
+        return res;
     } catch (const std::exception & error) {
-        return json{{"error", error.what()}};
+        std::cerr << "[ERROR] handleRequest [" << request.method << " " << request.path << "]: " << error.what() << std::endl;
+        json res = json::object();
+        res["error"] = error.what();
+        return res;
     }
 }
 
@@ -349,15 +460,16 @@ void closeSocket(socket_t socket_value) {
 }
 
 void handleClient(socket_t client_socket, AppContext & app) {
-    const std::string raw = readFromSocket(client_socket);
-    if (raw.empty()) {
-        return;
-    }
+    try {
+        const std::string raw = readFromSocket(client_socket);
+        if (raw.empty()) {
+            return;
+        }
 
-    const auto request = parseRequest(raw);
+        const auto request = parseRequest(raw);
+        std::cout << "[INFO] Request: " << request.method << " " << request.path << std::endl;
 
-    if (request.method == "POST" && request.path == "/search/stream") {
-        try {
+        if (request.method == "POST" && request.path == "/search/stream") {
             const auto body = parseJsonBody(request.body);
             const auto query = body.value("query", "");
             const auto mode = body.value("mode", "chat");
@@ -370,30 +482,49 @@ void handleClient(socket_t client_socket, AppContext & app) {
                 return;
             }
 
-            sendAll(client_socket, makeSseData(json{{"type", "start"}, {"query", query}}));
+            json start_msg = json::object();
+            start_msg["type"] = "start";
+            start_msg["query"] = query;
+            sendAll(client_socket, makeSseData(start_msg));
 
             const std::size_t chunk_size = 16;
             for (std::size_t i = 0; i < answer.size(); i += chunk_size) {
                 const std::string chunk = answer.substr(i, chunk_size);
-                if (!sendAll(client_socket, makeSseData(json{{"type", "token"}, {"content", chunk}}))) {
+                json token_msg = json::object();
+                token_msg["type"] = "token";
+                token_msg["content"] = chunk;
+                if (!sendAll(client_socket, makeSseData(token_msg))) {
                     return;
                 }
-                std::this_thread::sleep_for(std::chrono::milliseconds(12));
+                std::this_thread::sleep_for(std::chrono::milliseconds(20));
             }
 
-            sendAll(client_socket, makeSseData(json{{"type", "done"}, {"response", full}}));
-            return;
-        } catch (const std::exception & error) {
-            sendAll(client_socket, makeSseHeaders());
-            sendAll(client_socket, makeSseData(json{{"type", "error"}, {"message", error.what()}}));
+            json end_msg = json::object();
+            end_msg["type"] = "end";
+            sendAll(client_socket, makeSseData(end_msg));
             return;
         }
-    }
 
-    const json body = handleRequest(request, app);
-    const int status = body.contains("error") && request.path != "/health" ? 400 : 200;
-    const std::string response = makeResponse(status, body);
-    sendAll(client_socket, response);
+        const json response_body = handleRequest(request, app);
+        std::cout << "[DEBUG] Finished handleRequest for " << request.path << std::endl;
+        const std::string response_data = makeResponse(response_body.contains("error") ? 400 : 200, response_body);
+        sendAll(client_socket, response_data);
+        std::cout << "[INFO] Sent response for " << request.path << std::endl;
+    } catch (const std::exception & e) {
+        std::cerr << "[ERROR] handleClient exception: " << e.what() << std::endl;
+        try {
+            json err_msg = json::object();
+            err_msg["error"] = e.what();
+            sendAll(client_socket, makeResponse(500, err_msg));
+        } catch (...) {}
+    } catch (...) {
+        std::cerr << "[ERROR] handleClient: Unknown critical error" << std::endl;
+        try {
+            json err_msg = json::object();
+            err_msg["error"] = "Unknown internal error";
+            sendAll(client_socket, makeResponse(500, err_msg));
+        } catch (...) {}
+    }
 }
 
 socket_t createServerSocket(int port) {
@@ -433,6 +564,11 @@ int main(int argc, char ** argv) {
 
     const fs::path executable_path = argc > 0 ? fs::absolute(argv[0]) : fs::current_path();
     const fs::path executable_dir = executable_path.has_parent_path() ? executable_path.parent_path() : fs::current_path();
+    
+    // Load .env if present in executable dir or parent
+    loadEnv((executable_dir / ".env").string());
+    loadEnv((executable_dir / ".." / ".env").string());
+
     AppContext app(executable_dir);
     const int port = std::getenv("SECOND_BRAIN_PORT") ? std::atoi(std::getenv("SECOND_BRAIN_PORT")) : 8080;
 
@@ -449,7 +585,13 @@ int main(int argc, char ** argv) {
             }
 
             std::thread([client_socket, &app]() {
-                handleClient(client_socket, app);
+                try {
+                    handleClient(client_socket, app);
+                } catch (const std::exception & e) {
+                    std::cerr << "[CRITICAL] Worker Thread Error: " << e.what() << std::endl;
+                } catch (...) {
+                    std::cerr << "[CRITICAL] Worker Thread Unknown Error" << std::endl;
+                }
                 closeSocket(client_socket);
             }).detach();
         }
@@ -460,5 +602,5 @@ int main(int argc, char ** argv) {
 #if defined(_WIN32)
     WSACleanup();
 #endif
-    return 1;
+    return 0;
 }

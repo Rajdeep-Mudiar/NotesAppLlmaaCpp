@@ -1,0 +1,221 @@
+.flashcards-view {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #f8fafc;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.setup-container {
+  max-width: 650px;
+  width: 100%;
+  margin: auto;
+  padding: 2rem;
+  background: white;
+  border-radius: 24px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.04);
+}
+
+.setup-step {
+  margin-bottom: 2rem;
+}
+
+.setup-step label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 1rem;
+  font-size: 1.1rem;
+}
+
+.setup-step label .step-num {
+  width: 24px;
+  height: 24px;
+  background: var(--accent);
+  color: white;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+}
+
+.difficulty-picker {
+  display: flex;
+  gap: 12px;
+}
+
+.difficulty-btn {
+  flex: 1;
+  padding: 14px;
+  border: 2px solid #f1f5f9;
+  background: white;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-weight: 600;
+  text-transform: capitalize;
+  color: #64748b;
+}
+
+.difficulty-btn.active {
+  border-color: var(--accent);
+  background: rgba(0, 122, 255, 0.05);
+  color: var(--accent);
+}
+
+.notes-selector {
+  max-height: 250px;
+  overflow-y: auto;
+  border: 2px solid #f1f5f9;
+  border-radius: 16px;
+  padding: 8px;
+}
+
+.note-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-bottom: 4px;
+}
+
+.note-option:hover {
+  background: #f1f5f9;
+}
+
+.note-option.selected {
+  background: rgba(0, 122, 255, 0.08);
+  color: var(--accent);
+}
+
+/* Flashcard Styles */
+.card-scene {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.study-card {
+  width: 100%;
+  max-width: 480px;
+  height: 520px;
+  perspective: 1500px;
+  cursor: pointer;
+}
+
+.card-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transition: transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transform-style: preserve-3d;
+}
+
+.study-card.flipped .card-inner {
+  transform: rotateY(180deg);
+}
+
+.card-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  border-radius: 32px;
+  padding: 3rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.1);
+}
+
+.card-front {
+  background: white;
+  border: 1px solid rgba(0,0,0,0.05);
+}
+
+.card-back {
+  background: linear-gradient(135deg, #007AFF, #00C6FF);
+  color: white;
+  transform: rotateY(180deg);
+}
+
+.card-tag {
+  position: absolute;
+  top: 2rem;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  opacity: 0.6;
+}
+
+.card-content {
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1.4;
+  color: #1e293b;
+}
+
+.card-back .card-content {
+  color: white;
+  font-size: 1.4rem;
+  font-weight: 500;
+}
+
+/* Progress and Navigation */
+.study-nav {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  padding-bottom: 3rem;
+}
+
+.progress-container {
+  width: 100%;
+  max-width: 480px;
+  height: 6px;
+  background: #e2e8f0;
+  border-radius: 10px;
+  margin-bottom: 2rem;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.4s ease;
+}
+
+.nav-circle-btn {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: white;
+  border: none;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 1.2rem;
+}
+
+.nav-circle-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.nav-circle-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+}

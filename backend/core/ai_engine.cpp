@@ -109,55 +109,134 @@ std::string AiEngine::writePromptFile(const std::string & prompt) {
 }
 
 std::string AiEngine::cleanLlamaOutput(const std::string & raw) {
-    // 1. Identify common noise prefixes produced by llama-cli (Splash screen, logs, help text)
-    static const std::vector<std::string> noise_prefixes = {
+    if (raw.empty()) return {};
+
+    // 1. Noise patterns (logs, warnings, performance stats)
+    static const std::vector<std::string> noise_patterns = {
         "llama_", "ggml_", "gguf_", "load_tensors", "load_backend",
         "main:", "system_info", "sampling", "generate:", "[end of text]",
-        "build:", "Log start", "Log end", "warning:", "available commands:",
+        "build :", "model :", "modalities :", "available commands:",
         "/exit", "stop or exit", "/regen", "/clear", "/read", "/glob", ">",
-        "Press", "Enter", "...", "Loading model"
+        "Press", "Enter", "...", "Loading model", "error:", "warning:",
+        "no usable GPU found", "consult docs/build.md", "ignore",
+        "exceeds the available context size", "[ Prompt:", "Generation:"
     };
 
-    std::istringstream stream(raw);
+    // 2. High-precision Sentinel Search
+    static const std::vector<std::string> sentinels = {"@@@ANSWER_START@@@", "@@@JSON_START@@@"};
+    std::size_t last_sentinel_pos = std::string::npos;
+    for (const auto & s : sentinels) {
+        auto pos = raw.rfind(s);
+        if (pos != std::string::npos) {
+            if (last_sentinel_pos == std::string::npos || pos > last_sentinel_pos) {
+                last_sentinel_pos = pos + s.length();
+            }
+        }
+    }
+
+    std::string filtered;
+    if (last_sentinel_pos != std::string::npos) {
+        // We found a sentinel! Use everything after it.
+        filtered = raw.substr(last_sentinel_pos);
+    } else {
+        // No sentinel found. Try to find the last occurrence of common instructions as a fallback.
+        static const std::vector<std::string> start_markers = {
+            "### Response:",
+            "Answer (be concise and cite note titles):",
+            "JSON Flashcards:",
+            "Result:"
+        };
+        std::size_t last_marker_pos = std::string::npos;
+        for (const auto & marker : start_markers) {
+            auto pos = raw.rfind(marker);
+            if (pos != std::string::npos) {
+                if (last_marker_pos == std::string::npos || pos > last_marker_pos) {
+                    last_marker_pos = pos + marker.length();
+                }
+            }
+        }
+        
+        if (last_marker_pos != std::string::npos) {
+            filtered = raw.substr(last_marker_pos);
+        } else {
+            // Last resort: Brutal echo stripping
+            filtered = raw;
+            static const std::vector<std::string> echo_markers = {
+                "### Context (Notes):", "Notes:", "User question:", 
+                "### Question:", "Respond like", "You are an AI",
+                "[Title]", "[Tags]", "[Content]",
+                "<|system|>", "<|user|>", "<|assistant|>", "</s>", "assistant\n"
+            };
+            
+            // We want to find the LAST occurrence of ANY of these and strip everything before it
+            std::size_t final_strip_pos = std::string::npos;
+            for (const auto & marker : echo_markers) {
+                auto pos = filtered.rfind(marker);
+                if (pos != std::string::npos) {
+                    if (final_strip_pos == std::string::npos || pos > final_strip_pos) {
+                        final_strip_pos = pos;
+                    }
+                }
+            }
+
+            if (final_strip_pos != std::string::npos) {
+                // Find the end of that line
+                auto line_end = filtered.find('\n', final_strip_pos);
+                if (line_end != std::string::npos) {
+                    filtered = filtered.substr(line_end + 1);
+                } else {
+                    // Try to find the next meaningful content after the marker
+                    filtered = filtered.substr(final_strip_pos);
+                    // If it still starts with the marker, strip it manually
+                    for (const auto & marker : echo_markers) {
+                        if (filtered.find(marker) == 0) {
+                            filtered = filtered.substr(marker.length());
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 3. Final Noise Filter & Formatting
+    std::istringstream stream(filtered);
     std::ostringstream clean;
     std::string line;
     
-    // We want to skip everything until we find the actual answer part.
-    // Our prompt ends with "Answer (be concise and cite note titles):"
-    const std::string marker = "Answer (be concise and cite note titles):";
-    bool found_marker = false;
-    std::string after_marker;
-
-    // Search for the marker in the raw output (it might be echoed)
-    auto marker_pos = raw.rfind(marker);
-    if (marker_pos != std::string::npos) {
-        after_marker = raw.substr(marker_pos + marker.length());
-        found_marker = true;
-    }
-
-    // If we found the marker, process only what's after it.
-    // Otherwise, fallback to line-by-line filtering.
-    std::istringstream final_stream(found_marker ? after_marker : raw);
-
-    while (std::getline(final_stream, line)) {
+    while (std::getline(stream, line)) {
         if (!line.empty() && line.back() == '\r') { line.pop_back(); }
         
-        bool is_noise = false;
-        for (const auto & prefix : noise_prefixes) {
-            if (line.rfind(prefix, 0) == 0) { is_noise = true; break; }
+        // Remove ANSI escape codes
+        while (true) {
+            auto esc = line.find("\033");
+            if (esc == std::string::npos) break;
+            auto m = line.find('m', esc);
+            if (m == std::string::npos) break;
+            line.erase(esc, m - esc + 1);
         }
-        
-        // Also skip lines that are just prompt echoes (starting with '>')
-        if (!line.empty() && line[0] == '>') is_noise = true;
 
-        if (!is_noise) {
+        // Strip ASCII art blocks
+        int block_chars = 0;
+        for (unsigned char c : line) if (c >= 0x80) block_chars++;
+        if (block_chars > 8) continue; 
+
+        bool is_noise = false;
+        for (const auto & pattern : noise_patterns) {
+            if (line.find(pattern) != std::string::npos) {
+                is_noise = true;
+                break;
+            }
+        }
+
+        if (!is_noise && !line.empty()) {
             clean << line << '\n';
         }
     }
 
     std::string result = clean.str();
     const auto first = result.find_first_not_of(" \t\r\n");
-    if (first == std::string::npos) { return {}; }
+    if (first == std::string::npos) return {};
     const auto last = result.find_last_not_of(" \t\r\n");
     return result.substr(first, last - first + 1);
 }
@@ -176,14 +255,21 @@ std::string AiEngine::cleanLlamaOutput(const std::string & raw) {
 
 std::string AiEngine::generateViaServer(const std::string & prompt, int max_tokens) const {
 #if defined(_WIN32)
+    std::cerr << "[FAST] Connecting to llama-server at " << server_host_ << ":" << server_port_ << std::endl;
+    
     // Build JSON request body
     nlohmann::json req;
     req["prompt"]        = prompt;
     req["n_predict"]     = max_tokens;
-    req["temperature"]   = 0.2;
+    req["temperature"]   = 0.5;
     req["repeat_penalty"]= 1.1;
     req["stream"]        = false;
-    req["stop"]          = nlohmann::json::array({"</s>", "<|im_end|>", "<|end|>"});
+    nlohmann::json stop_tokens = nlohmann::json::array();
+    stop_tokens.push_back("</s>");
+    stop_tokens.push_back("<|im_end|>");
+    stop_tokens.push_back("<|end|>");
+    stop_tokens.push_back("###");
+    req["stop"] = stop_tokens;
     const std::string body = req.dump();
 
     // Open TCP connection to llama-server
@@ -204,14 +290,12 @@ std::string AiEngine::generateViaServer(const std::string & prompt, int max_toke
     inet_pton(AF_INET, server_host_.c_str(), &addr.sin_addr);
 
     if (connect(sock, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) != 0) {
-        std::cerr << "[FAST] Cannot connect to llama-server at "
-                  << server_host_ << ":" << server_port_
-                  << " (is it running?) — falling back to llama-cli" << std::endl;
+        std::cerr << "[FAST] Cannot connect to llama-server (is it running?)" << std::endl;
         closesocket(sock);
         return {};
     }
 
-    // Build HTTP/1.0 request (HTTP/1.0 avoids chunked transfer encoding)
+    // Build HTTP/1.0 request
     std::ostringstream http_req;
     http_req << "POST /completion HTTP/1.0\r\n"
              << "Host: " << server_host_ << ":" << server_port_ << "\r\n"
@@ -231,8 +315,16 @@ std::string AiEngine::generateViaServer(const std::string & prompt, int max_toke
     std::string raw_response;
     char buffer[8192];
     int n = 0;
-    while ((n = recv(sock, buffer, sizeof(buffer), 0)) > 0) {
-        raw_response.append(buffer, static_cast<std::size_t>(n));
+    while (true) {
+        n = recv(sock, buffer, sizeof(buffer), 0);
+        if (n > 0) {
+            raw_response.append(buffer, static_cast<std::size_t>(n));
+        } else if (n == 0) {
+            break; // Closed by server
+        } else {
+            std::cerr << "[FAST] recv() error: " << WSAGetLastError() << std::endl;
+            break;
+        }
     }
     closesocket(sock);
 
@@ -241,7 +333,7 @@ std::string AiEngine::generateViaServer(const std::string & prompt, int max_toke
         return {};
     }
 
-    // Extract HTTP body (after the blank header line)
+    // Extract HTTP body
     const auto body_start = raw_response.find("\r\n\r\n");
     if (body_start == std::string::npos) {
         std::cerr << "[FAST] Malformed HTTP response" << std::endl;
@@ -249,23 +341,18 @@ std::string AiEngine::generateViaServer(const std::string & prompt, int max_toke
     }
     const std::string json_body = raw_response.substr(body_start + 4);
 
-    // Parse JSON and extract "content"
-    const auto j = nlohmann::json::parse(json_body, nullptr, /*exceptions=*/false);
-    if (j.is_discarded()) {
-        std::cerr << "[FAST] JSON parse error on llama-server response" << std::endl;
+    try {
+        const auto j = nlohmann::json::parse(json_body);
+        if (!j.is_object() || !j.contains("content")) {
+            std::cerr << "[FAST] Unexpected JSON structure: " << json_body.substr(0, 100) << std::endl;
+            return {};
+        }
+        return j["content"].get<std::string>();
+    } catch (const std::exception& e) {
+        std::cerr << "[FAST] JSON/Parsing error: " << e.what() << std::endl;
         return {};
     }
-    if (!j.contains("content")) {
-        std::cerr << "[FAST] llama-server response missing 'content' field: "
-                  << json_body.substr(0, 200) << std::endl;
-        return {};
-    }
-
-    const std::string content = j["content"].get<std::string>();
-    std::cerr << "[FAST] llama-server replied, length=" << content.size() << std::endl;
-    return content;
 #else
-    // On non-Windows, just signal failure so the CLI path is used
     return {};
 #endif
 }
