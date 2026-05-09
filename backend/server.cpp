@@ -371,6 +371,17 @@ json handleRequest(const HttpRequest & request, AppContext & app) {
             return app.ai_service.buildSearchResponse(query, mode, persona);
         }
 
+        auto addSourceTitles = [&](json& res, const std::vector<std::string>& ids) {
+            auto all_notes = app.notes_service.loadNotes();
+            std::vector<std::string> titles;
+            for (const auto& note : all_notes) {
+                if (ids.empty() || std::find(ids.begin(), ids.end(), note.id) != ids.end()) {
+                    titles.push_back(note.title);
+                }
+            }
+            res["source_titles"] = titles;
+        };
+
         if (request.method == "POST" && request.path == "/flashcards") {
             const auto body = parseJsonBody(request.body);
             const int count = body.value("count", 5);
@@ -382,6 +393,7 @@ json handleRequest(const HttpRequest & request, AppContext & app) {
             auto res = app.ai_service.buildFlashcards(count, difficulty, noteIds);
             if (!res.contains("error")) {
                 res["created_at"] = NotesService::nowIso8601();
+                addSourceTitles(res, noteIds);
                 res = app.notes_service.saveArtifact("flashcards", res);
             }
             return res;
@@ -398,6 +410,7 @@ json handleRequest(const HttpRequest & request, AppContext & app) {
             auto res = app.ai_service.buildQuiz(count, difficulty, noteIds);
             if (!res.contains("error")) {
                 res["created_at"] = NotesService::nowIso8601();
+                addSourceTitles(res, noteIds);
                 res = app.notes_service.saveArtifact("quizzes", res);
             }
             return res;
@@ -429,6 +442,7 @@ json handleRequest(const HttpRequest & request, AppContext & app) {
             auto res = app.ai_service.buildNoteSummary(noteIds);
             if (!res.contains("error")) {
                 res["created_at"] = NotesService::nowIso8601();
+                addSourceTitles(res, noteIds);
                 res = app.notes_service.saveArtifact("summaries", res);
             }
             return res;
@@ -443,6 +457,7 @@ json handleRequest(const HttpRequest & request, AppContext & app) {
             auto res = app.ai_service.buildRoadmap(noteIds);
             if (!res.contains("error")) {
                 res["created_at"] = NotesService::nowIso8601();
+                addSourceTitles(res, noteIds);
                 res = app.notes_service.saveArtifact("roadmaps", res);
             }
             return res;

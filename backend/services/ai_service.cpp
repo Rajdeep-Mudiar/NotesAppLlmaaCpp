@@ -347,9 +347,12 @@ nlohmann::json AiService::buildQuiz(int count, const std::string & difficulty, c
         "2. UNIQUE OPTIONS: Do NOT use the same distractors for multiple questions.\n"
         "3. GROUNDING: Strictly use the provided notes.\n"
         "SOURCE_NOTES:\n" + context.str() + "\n"
-        "JSON FORMAT:</s>\n"
+        "JSON FORMAT: Provide an array of objects. Each object must have 'question', 'options' (array of 4 distinct strings), and 'answer' (exact match to one option).\n"
+        "EXAMPLE (Do not copy this content, use the notes):\n"
+        "[{\"question\":\"What is X?\", \"options\":[\"A\",\"B\",\"C\",\"D\"], \"answer\":\"A\"}]\n"
+        "</s>\n"
         "<|user|>\n"
-        "Generate EXACTLY " + std::to_string(count) + " different MCQs now.</s>\n"
+        "Generate EXACTLY " + std::to_string(count) + " different MCQs now. ONLY output the raw JSON array.</s>\n"
         "<|assistant|>\n"
         "[";
 
@@ -370,16 +373,23 @@ nlohmann::json AiService::buildQuiz(int count, const std::string & difficulty, c
 
     // DYNAMIC FALLBACK: Diverse questions and rotating options
     if (questions.empty() || (int)questions.size() < count) {
-        std::vector<std::string> distractor_pool = {
-            "A systematic methodology for architectural design.",
-            "The primary protocol for high-level data integration.",
-            "A theoretical framework for optimized performance.",
-            "The core strategy for resource allocation.",
-            "A comparative analysis of implementation models.",
-            "The foundational principle of systemic scaling.",
-            "A comprehensive overview of functional requirements.",
-            "The standardized approach to modular development."
-        };
+        std::vector<std::string> distractor_pool;
+        for (const auto& note : filtered_notes) {
+            auto s = splitSentences(note.content);
+            for (auto& sent : s) {
+                if (sent.size() > 20 && sent.size() < 120) distractor_pool.push_back(sent);
+            }
+        }
+        
+        // Add generic fallbacks only if we don't have enough sentences from notes
+        if (distractor_pool.size() < 4) {
+            distractor_pool.push_back("A systematic methodology for architectural design.");
+            distractor_pool.push_back("The primary protocol for high-level data integration.");
+            distractor_pool.push_back("A theoretical framework for optimized performance.");
+            distractor_pool.push_back("The core strategy for resource allocation.");
+            distractor_pool.push_back("A comparative analysis of implementation models.");
+            distractor_pool.push_back("The foundational principle of systemic scaling.");
+        }
 
         for (int i = (int)questions.size(); i < count; ++i) {
             const auto & note = filtered_notes[i % filtered_notes.size()];
@@ -395,21 +405,34 @@ nlohmann::json AiService::buildQuiz(int count, const std::string & difficulty, c
             }
             
             nlohmann::json opts = nlohmann::json::array();
-            opts.push_back("The optimized execution of " + topic + " based on note criteria."); // Correct
+            std::string correct_answer = "The optimized execution of " + topic + " based on note criteria.";
             
             // Pick 3 unique distractors from the pool based on index
             std::set<int> picked_indices;
-            while (picked_indices.size() < 3) {
-                int idx = (i * 3 + (int)picked_indices.size()) % distractor_pool.size();
-                picked_indices.insert(idx);
+            int attempt = 0;
+            while (picked_indices.size() < 3 && attempt < 20) {
+                int idx = (i * 7 + (int)picked_indices.size() * 13 + attempt) % distractor_pool.size();
+                if (distractor_pool[idx] != correct_answer) {
+                    picked_indices.insert(idx);
+                }
+                attempt++;
             }
             
+            std::vector<std::string> options_vec;
             for (int idx : picked_indices) {
-                opts.push_back(distractor_pool[idx]);
+                options_vec.push_back(distractor_pool[idx]);
+            }
+            
+            // Insert correct answer at pseudo-random position
+            int correct_pos = (i * 17) % 4;
+            options_vec.insert(options_vec.begin() + correct_pos, correct_answer);
+            
+            for (const auto& opt : options_vec) {
+                opts.push_back(opt);
             }
             
             q["options"] = opts;
-            q["answer"] = opts[0];
+            q["answer"] = correct_answer;
             questions.push_back(q);
         }
     }
@@ -796,18 +819,11 @@ nlohmann::json AiService::buildNoteSummary(const std::vector<std::string> & note
         "You are an expert summarizer. Read the provided notes and output a structured 'Section-by-Section Summary'.\n"
         "CRITICAL INSTRUCTIONS:\n"
         "1. Summarize the notes BY USING YOUR OWN LANGUAGE. Paraphrase concepts clearly. DO NOT copy-paste the notes.\n"
-        "2. DO NOT repeat the same phrases or words over and over. Ensure the summary flows naturally and concisely.\n"
+        "2. Do not write 'meta-text' (e.g. do not say 'This section explains...'). Just provide the actual factual summary.\n"
         "3. Output EXACTLY valid JSON. No markdown formatting, no code blocks.\n"
-        "4. Your JSON must strictly follow this structure:\n"
-        "{\n"
-        "  \"overall_summary\": \"(Write a 2-3 sentence overview of everything here)\",\n"
-        "  \"sections\": [\n"
-        "    {\n"
-        "      \"heading\": \"(Section Title)\",\n"
-        "      \"summary\": \"(Detailed summary of this section)\"\n"
-        "    }\n"
-        "  ]\n"
-        "}\n"
+        "4. Your output MUST be a JSON object with EXACTLY two keys: 'overall_summary' and 'sections'. DO NOT output any other keys.\n"
+        "   - 'overall_summary' (string): A real, detailed 3-sentence overview of the entire content.\n"
+        "   - 'sections' (array of objects): Each object must have 'heading' (string, the topic name) and 'summary' (string, a factual paragraph summarizing that specific topic).\n"
         "Input Notes Content:\n" + note_content + "\n"
         "</s>\n"
         "<|user|>\n"

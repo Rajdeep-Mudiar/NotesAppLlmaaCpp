@@ -17,7 +17,6 @@ const views = [
   { id: "notes", label: "Notes" },
   { id: "flashcards", label: "Flashcards" },
   { id: "quiz", label: "Quiz Arena" },
-  { id: "graph", label: "Knowledge Graph" },
   { id: "roadmap", label: "Roadmap" },
   { id: "summarizer", label: "Summarizer" },
 ];
@@ -260,9 +259,7 @@ export default function App() {
             />
           ) : null}
 
-          {activeView === "graph" ? (
-            <Graph graph={graph} contradictions={contradictions} />
-          ) : null}
+
 
           {activeView === "roadmap" ? (
             <Roadmap 

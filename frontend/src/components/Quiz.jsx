@@ -144,6 +144,11 @@ export default function Quiz({ quiz, history, notes, onLoadHistory, onGenerateQu
                   onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.transform = 'translateY(0)'; }}
                 >
                   <div style={{ fontWeight: '700', color: '#0f172a' }}>{item.questions?.length || 0} Questions</div>
+                  {item.source_titles && item.source_titles.length > 0 && (
+                    <div style={{ fontSize: '0.85rem', color: '#334155', marginTop: '6px', fontStyle: 'italic', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                      From: {item.source_titles.join(', ')}
+                    </div>
+                  )}
                   <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '4px' }}>
                     {new Date(item.created_at).toLocaleString()}
                   </div>
