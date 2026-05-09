@@ -107,7 +107,6 @@ graph TD
     end
 
     %% Network Connections
-    %% Network Connections
     Browser <-->|"REST API / SSE Streams"| Server
     UI_Chat <-->|"Streams JSON chunks"| Server
     UI_Notes <-->|"JSON Body"| Server
@@ -125,46 +124,7 @@ graph TD
     Bridge <-->|"pymongo TCP/IP"| MongoDB
 ```
 
-### 1. Frontend Component Architecture
-Details the different React modules and how they are categorized within the application.
 
-```mermaid
-graph TD
-    App["App (Routing & Global State)"]
-    
-    App --> Core["Core Features"]
-    Core --> Notes["📝 Notes Manager"]
-    
-    App --> AI["AI Modules"]
-    AI --> Chat["💬 Chat (RAG) Interface"]
-    AI --> Summarize["✨ Note Summarizer"]
-    
-    App --> Study["Study Tools"]
-    Study --> Roadmap["🗺️ Learning Roadmap"]
-    Study --> Quiz["🎯 Quiz Arena"]
-    Study --> Flash["🗂️ Flashcards"]
-```
-
-### 2. Backend & AI Execution Flow
-Illustrates how the C++ server orchestrates data from MongoDB and streams it to the Local LLM.
-
-```mermaid
-graph TD
-    Req["Incoming Request"] --> HTTPServer["🌐 HTTP/SSE Server (:8080)"]
-    
-    HTTPServer -->|CRUD Operations| NotesService["📂 Notes Service"]
-    NotesService <-->|Subprocess Pipe| PythonBridge["🐍 Python Storage Bridge"]
-    PythonBridge <-->|Network| Mongo[("🍃 MongoDB")]
-    
-    HTTPServer -->|AI Features| AIService["🧠 AI Prompt Service"]
-    AIService --> Engine["⚡ AI Engine (Orchestrator)"]
-    
-    Engine -->|Primary: Fast HTTP API| Server["llama-server (:8081)"]
-    Engine -.->|Fallback: Subprocess| CLI["llama-cli"]
-    
-    Server <--> GGUF[("Local .gguf Model")]
-    CLI <--> GGUF
-```
 
 ---
 
