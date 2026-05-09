@@ -79,8 +79,8 @@ graph TD
         NotesAPI["📂 Notes Service (notes_service.cpp)"]:::backend
         AIAPI["🧠 AI Service (ai_service.cpp)"]:::backend
         
-        Server -->|CRUD routes| NotesAPI
-        Server -->|AI features routes| AIAPI
+        Server -->|"CRUD routes"| NotesAPI
+        Server -->|"AI features routes"| AIAPI
     end
 
     subgraph PythonLayer["🐍 Data Persistence Layer"]
@@ -92,8 +92,8 @@ graph TD
         LlamaServer["llama-server (Port: 8081)"]:::ai
         GGUF[("Local .gguf Model")]:::ai
         
-        AIEngine -->|HTTP POST (Prompt)| LlamaServer
-        LlamaServer <-->|Inference| GGUF
+        AIEngine -->|"HTTP POST (Prompt)"| LlamaServer
+        LlamaServer <-->|"Inference"| GGUF
     end
 
     subgraph Database["☁️ Cloud Database"]
@@ -107,21 +107,22 @@ graph TD
     end
 
     %% Network Connections
-    Browser <-->|REST API / SSE Streams| Server
-    UI_Chat <-->|Streams JSON chunks| Server
-    UI_Notes <-->|JSON Body| Server
-    UI_Study <-->|JSON Body| Server
+    %% Network Connections
+    Browser <-->|"REST API / SSE Streams"| Server
+    UI_Chat <-->|"Streams JSON chunks"| Server
+    UI_Notes <-->|"JSON Body"| Server
+    UI_Study <-->|"JSON Body"| Server
     
     %% Backend to AI 
-    AIAPI -->|Constructs Prompts| AIEngine
-    AIEngine -.->|Generates Response| AIAPI
+    AIAPI -->|"Constructs Prompts"| AIEngine
+    AIEngine -.->|"Generates Response"| AIAPI
     
     %% Backend to Storage
-    NotesAPI <-->|stdin/stdout pipes JSON| Bridge
-    AIAPI <-->|Fetches note context| NotesAPI
+    NotesAPI <-->|"stdin/stdout pipes JSON"| Bridge
+    AIAPI <-->|"Fetches note context"| NotesAPI
     
     %% Storage to Cloud
-    Bridge <-->|pymongo TCP/IP| MongoDB
+    Bridge <-->|"pymongo TCP/IP"| MongoDB
 ```
 
 ### 1. Frontend Component Architecture
