@@ -54,14 +54,14 @@ The following diagram illustrates the flow of data and the interaction between t
 
 ```mermaid
 graph TD
-    subgraph Frontend [Frontend (Vite + React)]
+    subgraph Frontend
         UI[User Interface]
         Chat[Chat / RAG Interface]
         Notes[Notes Manager]
         Flashcards[Flashcards & Quizzes]
     end
 
-    subgraph Backend [Backend (C++20 Custom Server)]
+    subgraph Backend
         HTTPServer[HTTP/SSE Server :8080]
         NotesService[Notes Service]
         AIService[AI Service & RAG Engine]
@@ -70,14 +70,14 @@ graph TD
         HTTPServer <--> AIService
     end
 
-    subgraph Llama [Local AI Engine]
+    subgraph Llama
         LlamaServer[llama-server :8081]
         GGUF[(Local .gguf Model)]
         
         LlamaServer <--> GGUF
     end
 
-    subgraph Storage [Database Layer]
+    subgraph Storage
         PythonBridge[Python Storage Bridge]
         MongoDB[(MongoDB Atlas / Local)]
         
