@@ -53,61 +53,52 @@ A privacy-focused, full-stack notes app with local AI features and cloud persist
 The following diagram illustrates the flow of data and the interaction between the different components of the system:
 
 ```mermaid
+graph LR
+    Client["🎨 Client (React)"] <-->|REST / SSE| API["⚙️ Backend API (C++)"]
+    API <-->|HTTP / Pipe| LLM["🤖 Inference Engine (llama.cpp)"]
+    API <-->|Pipe| DB["☁️ Storage Bridge (Python/Mongo)"]
+```
+
+### 1. Frontend Component Architecture
+Details the different React modules and how they are categorized within the application.
+
+```mermaid
 graph TD
-    %% Frontend Subgraph
-    subgraph Frontend["🎨 Frontend (React/Vite)"]
-        UI["App Controller & Sidebar"]
-        
-        subgraph Features["User Modules"]
-            Notes["📝 Notes Manager"]
-            Chat["💬 AI Chat (RAG)"]
-            Summarizer["✨ Summarizer"]
-            Flashcards["🗂️ Flashcards"]
-            Quiz["🎯 Quiz Arena"]
-            Roadmap["🗺️ Learning Roadmap"]
-            Graph["🕸️ Knowledge Graph"]
-        end
-        
-        UI --> Features
-    end
-
-    %% Backend Subgraph
-    subgraph Backend["⚙️ C++ API Backend"]
-        HTTPServer["🌐 HTTP/SSE Server (:8080)"]
-        NotesService["📂 Notes Service"]
-        AIService["🧠 AI Service (Prompt Builder)"]
-        AIEngine["⚡ AI Engine (Router)"]
-        
-        HTTPServer <--> NotesService
-        HTTPServer <--> AIService
-        AIService <--> AIEngine
-    end
-
-    %% AI Inference Subgraph
-    subgraph Llama["🤖 Llama Inference Engine"]
-        LlamaServer["llama-server (:8081)<br/>(Fast HTTP Path)"]
-        LlamaCLI["llama-cli<br/>(Slow Subprocess Path)"]
-        GGUF[("Local .gguf Model")]
-        
-        LlamaServer <--> GGUF
-        LlamaCLI <--> GGUF
-    end
-
-    %% Storage Subgraph
-    subgraph Storage["☁️ Persistence Layer"]
-        PythonBridge["🐍 Python Storage Bridge"]
-        MongoDB[("🍃 MongoDB (Atlas/Local)")]
-        
-        PythonBridge <--> MongoDB
-    end
-
-    %% Cross-boundary connections
-    Features <-->|REST API & SSE| HTTPServer
+    App["App (Routing & Global State)"]
     
-    AIEngine <-->|HTTP POST| LlamaServer
-    AIEngine -. Spawn Pipe fallback .-> LlamaCLI
+    App --> Core["Core Features"]
+    Core --> Notes["📝 Notes Manager"]
+    Core --> Graph["🕸️ Knowledge Graph"]
     
-    NotesService <-->|Subprocess I/O| PythonBridge
+    App --> AI["AI Modules"]
+    AI --> Chat["💬 Chat (RAG) Interface"]
+    AI --> Summarize["✨ Note Summarizer"]
+    
+    App --> Study["Study Tools"]
+    Study --> Roadmap["🗺️ Learning Roadmap"]
+    Study --> Quiz["🎯 Quiz Arena"]
+    Study --> Flash["🗂️ Flashcards"]
+```
+
+### 2. Backend & AI Execution Flow
+Illustrates how the C++ server orchestrates data from MongoDB and streams it to the Local LLM.
+
+```mermaid
+graph TD
+    Req["Incoming Request"] --> HTTPServer["🌐 HTTP/SSE Server (:8080)"]
+    
+    HTTPServer -->|CRUD Operations| NotesService["📂 Notes Service"]
+    NotesService <-->|Subprocess Pipe| PythonBridge["🐍 Python Storage Bridge"]
+    PythonBridge <-->|Network| Mongo[("🍃 MongoDB")]
+    
+    HTTPServer -->|AI Features| AIService["🧠 AI Prompt Service"]
+    AIService --> Engine["⚡ AI Engine (Orchestrator)"]
+    
+    Engine -->|Primary: Fast HTTP API| Server["llama-server (:8081)"]
+    Engine -.->|Fallback: Subprocess| CLI["llama-cli"]
+    
+    Server <--> GGUF[("Local .gguf Model")]
+    CLI <--> GGUF
 ```
 
 ---
