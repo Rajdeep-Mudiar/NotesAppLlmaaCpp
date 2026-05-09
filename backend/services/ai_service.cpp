@@ -395,24 +395,24 @@ nlohmann::json AiService::buildQuiz(int count, const std::string & difficulty, c
             const auto & note = filtered_notes[i % filtered_notes.size()];
             nlohmann::json q = nlohmann::json::object();
             
-            std::string topic = !note.tags.empty() ? note.tags[i % note.tags.size()] : note.title;
+            int correct_idx = (i * 5 + 1) % distractor_pool.size();
+            std::string correct_answer = distractor_pool[correct_idx];
             
             // Vary the question style
             if (i % 2 == 0) {
-                q["question"] = "Which of the following is the defining characteristic of '" + topic + "' according to the notes?";
+                q["question"] = "Which of the following is an accurate statement from your notes regarding '" + note.title + "'?";
             } else {
-                q["question"] = "Based on the material in '" + note.title + "', what role does " + topic + " play in the overall system?";
+                q["question"] = "Based on the material in '" + note.title + "', which of these is true?";
             }
             
             nlohmann::json opts = nlohmann::json::array();
-            std::string correct_answer = "The optimized execution of " + topic + " based on note criteria.";
             
             // Pick 3 unique distractors from the pool based on index
             std::set<int> picked_indices;
             int attempt = 0;
             while (picked_indices.size() < 3 && attempt < 20) {
                 int idx = (i * 7 + (int)picked_indices.size() * 13 + attempt) % distractor_pool.size();
-                if (distractor_pool[idx] != correct_answer) {
+                if (idx != correct_idx && distractor_pool[idx] != correct_answer) {
                     picked_indices.insert(idx);
                 }
                 attempt++;
