@@ -54,44 +54,60 @@ The following diagram illustrates the flow of data and the interaction between t
 
 ```mermaid
 graph TD
-    subgraph Frontend
-        UI[User Interface]
-        Chat[Chat / RAG Interface]
-        Notes[Notes Manager]
-        Flashcards[Flashcards & Quizzes]
+    %% Frontend Subgraph
+    subgraph Frontend["🎨 Frontend (React/Vite)"]
+        UI["App Controller & Sidebar"]
+        
+        subgraph Features["User Modules"]
+            Notes["📝 Notes Manager"]
+            Chat["💬 AI Chat (RAG)"]
+            Summarizer["✨ Summarizer"]
+            Flashcards["🗂️ Flashcards"]
+            Quiz["🎯 Quiz Arena"]
+            Roadmap["🗺️ Learning Roadmap"]
+            Graph["🕸️ Knowledge Graph"]
+        end
+        
+        UI --> Features
     end
 
-    subgraph Backend
-        HTTPServer[HTTP/SSE Server :8080]
-        NotesService[Notes Service]
-        AIService[AI Service & RAG Engine]
+    %% Backend Subgraph
+    subgraph Backend["⚙️ C++ API Backend"]
+        HTTPServer["🌐 HTTP/SSE Server (:8080)"]
+        NotesService["📂 Notes Service"]
+        AIService["🧠 AI Service (Prompt Builder)"]
+        AIEngine["⚡ AI Engine (Router)"]
         
         HTTPServer <--> NotesService
         HTTPServer <--> AIService
+        AIService <--> AIEngine
     end
 
-    subgraph Llama
-        LlamaServer[llama-server :8081]
-        GGUF[(Local .gguf Model)]
+    %% AI Inference Subgraph
+    subgraph Llama["🤖 Llama Inference Engine"]
+        LlamaServer["llama-server (:8081)<br/>(Fast HTTP Path)"]
+        LlamaCLI["llama-cli<br/>(Slow Subprocess Path)"]
+        GGUF[("Local .gguf Model")]
         
         LlamaServer <--> GGUF
+        LlamaCLI <--> GGUF
     end
 
-    subgraph Storage
-        PythonBridge[Python Storage Bridge]
-        MongoDB[(MongoDB Atlas / Local)]
+    %% Storage Subgraph
+    subgraph Storage["☁️ Persistence Layer"]
+        PythonBridge["🐍 Python Storage Bridge"]
+        MongoDB[("🍃 MongoDB (Atlas/Local)")]
         
         PythonBridge <--> MongoDB
     end
 
-    %% Connections
-    UI <-->|REST API| HTTPServer
-    Chat <-->|SSE Streaming| HTTPServer
-    Notes <-->|REST API| HTTPServer
-    Flashcards <-->|REST API| HTTPServer
-
-    AIService <-->|HTTP API| LlamaServer
-    NotesService <-->|Subprocess/Pipe| PythonBridge
+    %% Cross-boundary connections
+    Features <-->|REST API & SSE| HTTPServer
+    
+    AIEngine <-->|HTTP POST| LlamaServer
+    AIEngine -.->|Spawn Pipe (Fallback)| LlamaCLI
+    
+    NotesService <-->|Subprocess I/O| PythonBridge
 ```
 
 ---
