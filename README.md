@@ -38,12 +38,12 @@ A privacy-focused, full-stack notes app with local AI features and cloud persist
 3. **Advanced AI Insights & Tools**
    - **Flashcard Generation:** Automatically generate study flashcards (Question & Answer pairs) from specific notes to aid active recall.
    - **Learning Roadmaps:** Transform raw study notes into highly detailed, actionable undergraduate learning roadmaps using an AI curriculum designer persona.
-   - **Knowledge Graphs:** Discover connections and map relationships between different notes and topics visually.
-   - **Contradiction Detection:** AI scans your notes to find conflicting information or conflicting ideas.
-   - **Quiz Arena:** Auto-generated quizzes from your content with strict prompt-based constraints to guarantee the target question count.
+   - **Section Summarizer:** Generate structured, paragraph-by-paragraph summaries of selected notes to condense large amounts of text.
+   - **Quiz Arena:** Auto-generated dynamic MCQs and fill-in-the-blank quizzes from your content with strict prompt-based constraints to guarantee the target question count.
 
 4. **Cloud & Local Persistence**
    - **MongoDB Atlas Integration:** Sync your notes securely to the cloud.
+   - **Artifact History:** All generated AI artifacts (Quizzes, Flashcards, Summaries, Roadmaps) are automatically saved to your Recent History for instant reload.
    - **Local Caching:** Temporary storage and fallback handling.
 
 ---
@@ -53,10 +53,75 @@ A privacy-focused, full-stack notes app with local AI features and cloud persist
 The following diagram illustrates the flow of data and the interaction between the different components of the system:
 
 ```mermaid
-graph LR
-    Client["🎨 Client (React)"] <-->|REST / SSE| API["⚙️ Backend API (C++)"]
-    API <-->|HTTP / Pipe| LLM["🤖 Inference Engine (llama.cpp)"]
-    API <-->|Pipe| DB["☁️ Storage Bridge (Python/Mongo)"]
+graph TD
+    %% Define Styles
+    classDef frontend fill:#3b82f6,stroke:#1e40af,stroke-width:2px,color:#fff,rx:8px,ry:8px;
+    classDef backend fill:#10b981,stroke:#047857,stroke-width:2px,color:#fff,rx:8px,ry:8px;
+    classDef ai fill:#8b5cf6,stroke:#5b21b6,stroke-width:2px,color:#fff,rx:8px,ry:8px;
+    classDef db fill:#f59e0b,stroke:#b45309,stroke-width:2px,color:#fff,rx:8px,ry:8px;
+    classDef artifact fill:#64748b,stroke:#334155,stroke-width:1px,color:#fff,stroke-dasharray: 5 5;
+
+    subgraph User["👤 User Device"]
+        Browser("🌐 Web Browser"):::frontend
+    end
+
+    subgraph Frontend["🎨 React.js Frontend (Port: 5173)"]
+        UI_Router["App.jsx (Router)"]:::frontend
+        UI_Chat["💬 Chat Interface"]:::frontend
+        UI_Notes["📝 Notes Manager"]:::frontend
+        UI_Study["📚 Study Tools (Quiz, Flashcards, Roadmap)"]:::frontend
+        
+        UI_Router --> UI_Chat & UI_Notes & UI_Study
+    end
+
+    subgraph Backend["⚙️ C++20 Backend API (Port: 8080)"]
+        Server["HTTP / SSE Server (server.cpp)"]:::backend
+        NotesAPI["📂 Notes Service (notes_service.cpp)"]:::backend
+        AIAPI["🧠 AI Service (ai_service.cpp)"]:::backend
+        
+        Server -->|CRUD routes| NotesAPI
+        Server -->|AI features routes| AIAPI
+    end
+
+    subgraph PythonLayer["🐍 Data Persistence Layer"]
+        Bridge["Python Storage Bridge (storage_bridge.py)"]:::db
+    end
+
+    subgraph AILayer["🤖 AI Inference Engine (llama.cpp)"]
+        AIEngine["⚡ AI Orchestrator (ai_engine.cpp)"]:::ai
+        LlamaServer["llama-server (Port: 8081)"]:::ai
+        GGUF[("Local .gguf Model")]:::ai
+        
+        AIEngine -->|HTTP POST (Prompt)| LlamaServer
+        LlamaServer <-->|Inference| GGUF
+    end
+
+    subgraph Database["☁️ Cloud Database"]
+        MongoDB[("MongoDB Atlas")]:::db
+        
+        Notes[("User Notes")]:::artifact
+        Artifacts[("Saved AI Artifacts\n(Quizzes, Summaries)")]:::artifact
+        
+        MongoDB --- Notes
+        MongoDB --- Artifacts
+    end
+
+    %% Network Connections
+    Browser <-->|REST API / SSE Streams| Server
+    UI_Chat <-->|Streams JSON chunks| Server
+    UI_Notes <-->|JSON Body| Server
+    UI_Study <-->|JSON Body| Server
+    
+    %% Backend to AI 
+    AIAPI -->|Constructs Prompts| AIEngine
+    AIEngine -.->|Generates Response| AIAPI
+    
+    %% Backend to Storage
+    NotesAPI <-->|stdin/stdout pipes JSON| Bridge
+    AIAPI <-->|Fetches note context| NotesAPI
+    
+    %% Storage to Cloud
+    Bridge <-->|pymongo TCP/IP| MongoDB
 ```
 
 ### 1. Frontend Component Architecture
@@ -68,7 +133,6 @@ graph TD
     
     App --> Core["Core Features"]
     Core --> Notes["📝 Notes Manager"]
-    Core --> Graph["🕸️ Knowledge Graph"]
     
     App --> AI["AI Modules"]
     AI --> Chat["💬 Chat (RAG) Interface"]
@@ -198,7 +262,9 @@ npm run dev
 - `POST /search/stream` — AI search/chat (Streaming SSE).
 - `POST /insights` — Generate note metrics.
 - `POST /flashcards` — Generate study cards from notes.
-- `POST /graph` — Get Knowledge Graph data.
+- `POST /quiz` — Generate interactive quizzes.
+- `POST /roadmap` — Generate learning roadmaps.
+- `POST /summarize` — Generate section-by-section summaries.
 
 ---
 
