@@ -343,9 +343,9 @@ nlohmann::json AiService::buildQuiz(int count, const std::string & difficulty, c
         "<|system|>\n"
         "You are a Professional Quiz Creator. Generate EXACTLY " + std::to_string(count) + " unique Multiple Choice Questions from the SOURCE_NOTES.\n"
         "STRICT DIVERSITY RULES:\n"
-        "1. NO REPETITION: Every question must cover a different aspect or topic.\n"
-        "2. UNIQUE OPTIONS: Do NOT use the same distractors for multiple questions.\n"
-        "3. GROUNDING: Strictly use the provided notes.\n"
+        "1. NO REPETITION: Every single question MUST cover a completely different aspect or sub-topic.\n"
+        "2. UNIQUE OPTIONS: Do NOT reuse the same distractors across different questions.\n"
+        "3. CONTEXTUAL BOUNDARIES: Read the SOURCE_NOTES to understand the core subject. You may synthesize your own high-quality questions using your broader knowledge about these subjects, but DO NOT go out of context. Stay strictly within the domains discussed in the notes.\n"
         "SOURCE_NOTES:\n" + context.str() + "\n"
         "JSON FORMAT: Provide an array of objects. Each object must have 'question', 'options' (array of 4 distinct strings), and 'answer' (exact match to one option).\n"
         "EXAMPLE (Do not copy this content, use the notes):\n"
@@ -391,45 +391,72 @@ nlohmann::json AiService::buildQuiz(int count, const std::string & difficulty, c
             distractor_pool.push_back("The foundational principle of systemic scaling.");
         }
 
+        std::vector<std::string> word_pool;
+        for (const auto& s : distractor_pool) {
+            std::istringstream iss(s);
+            std::string w;
+            while(iss >> w) {
+                std::string clean;
+                for (char c : w) if (!std::ispunct(c)) clean += c;
+                if (clean.size() > 5) word_pool.push_back(clean);
+            }
+        }
+        if (word_pool.size() < 4) {
+            word_pool.push_back("Algorithm"); word_pool.push_back("Structure");
+            word_pool.push_back("Process"); word_pool.push_back("System");
+        }
+
         for (int i = (int)questions.size(); i < count; ++i) {
-            const auto & note = filtered_notes[i % filtered_notes.size()];
             nlohmann::json q = nlohmann::json::object();
             
             int correct_idx = (i * 5 + 1) % distractor_pool.size();
-            std::string correct_answer = distractor_pool[correct_idx];
+            std::string sentence = distractor_pool[correct_idx];
             
-            // Vary the question style
-            if (i % 2 == 0) {
-                q["question"] = "Which of the following is an accurate statement from your notes regarding '" + note.title + "'?";
-            } else {
-                q["question"] = "Based on the material in '" + note.title + "', which of these is true?";
+            std::istringstream iss(sentence);
+            std::string word, target_word;
+            while(iss >> word) {
+                std::string clean;
+                for (char c : word) if (!std::ispunct(c)) clean += c;
+                if (clean.size() > 5) {
+                    target_word = clean;
+                    break;
+                }
             }
             
-            nlohmann::json opts = nlohmann::json::array();
+            if (target_word.empty()) target_word = "concept";
             
-            // Pick 3 unique distractors from the pool based on index
-            std::set<int> picked_indices;
+            std::string question_text = sentence;
+            size_t pos = question_text.find(target_word);
+            if (pos != std::string::npos) {
+                question_text.replace(pos, target_word.length(), "______");
+            } else {
+                question_text += " (What is the key term?)";
+            }
+            
+            q["question"] = "Fill in the blank: " + question_text;
+            std::string correct_answer = target_word;
+            
+            std::set<std::string> picked_words;
+            picked_words.insert(correct_answer);
             int attempt = 0;
-            while (picked_indices.size() < 3 && attempt < 20) {
-                int idx = (i * 7 + (int)picked_indices.size() * 13 + attempt) % distractor_pool.size();
-                if (idx != correct_idx && distractor_pool[idx] != correct_answer) {
-                    picked_indices.insert(idx);
-                }
+            while (picked_words.size() < 4 && attempt < 50) {
+                int w_idx = (i * 7 + (int)picked_words.size() * 13 + attempt) % word_pool.size();
+                picked_words.insert(word_pool[w_idx]);
                 attempt++;
             }
             
             std::vector<std::string> options_vec;
-            for (int idx : picked_indices) {
-                options_vec.push_back(distractor_pool[idx]);
+            for (const auto& w : picked_words) {
+                if (w != correct_answer) options_vec.push_back(w);
             }
+            if (options_vec.size() > 3) options_vec.resize(3);
             
-            // Insert correct answer at pseudo-random position
             int correct_pos = (i * 17) % 4;
+            if (correct_pos > (int)options_vec.size()) correct_pos = options_vec.size();
             options_vec.insert(options_vec.begin() + correct_pos, correct_answer);
             
-            for (const auto& opt : options_vec) {
-                opts.push_back(opt);
-            }
+            nlohmann::json opts = nlohmann::json::array();
+            for (const auto& opt : options_vec) opts.push_back(opt);
             
             q["options"] = opts;
             q["answer"] = correct_answer;
@@ -818,12 +845,13 @@ nlohmann::json AiService::buildNoteSummary(const std::vector<std::string> & note
         "<|system|>\n"
         "You are an expert summarizer. Read the provided notes and output a structured 'Section-by-Section Summary'.\n"
         "CRITICAL INSTRUCTIONS:\n"
-        "1. Summarize the notes BY USING YOUR OWN LANGUAGE. Paraphrase concepts clearly. DO NOT copy-paste the notes.\n"
-        "2. Do not write 'meta-text' (e.g. do not say 'This section explains...'). Just provide the actual factual summary.\n"
+        "1. Summarize the notes BY USING FULL SENTENCES in your own words. DO NOT just list keywords or bullet points.\n"
+        "2. Do not write 'meta-text' (e.g. do not say 'This section explains...'). Just provide the factual summary.\n"
         "3. Output EXACTLY valid JSON. No markdown formatting, no code blocks.\n"
         "4. Your output MUST be a JSON object with EXACTLY two keys: 'overall_summary' and 'sections'. DO NOT output any other keys.\n"
-        "   - 'overall_summary' (string): A real, detailed 3-sentence overview of the entire content.\n"
-        "   - 'sections' (array of objects): Each object must have 'heading' (string, the topic name) and 'summary' (string, a factual paragraph summarizing that specific topic).\n"
+        "   - 'overall_summary' (string): A detailed 3-sentence overview of the entire content.\n"
+        "   - 'sections' (array of objects): Each object must have 'heading' (string, unique topic name) and 'summary' (string, a factual paragraph summarizing that specific topic).\n"
+        "5. DO NOT REPEAT SECTIONS. Merge similar topics together. Ensure the JSON is properly closed with '}' at the end.\n"
         "Input Notes Content:\n" + note_content + "\n"
         "</s>\n"
         "<|user|>\n"
